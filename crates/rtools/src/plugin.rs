@@ -3,6 +3,8 @@
 //! A plugin describes itself with a [`PluginManifest`], optionally recognizes
 //! pasted or typed content through [`Plugin::accepts`], and builds its root view
 //! in [`Plugin::open`]. The shell finds plugins through a [`PluginRegistry`].
+//! Plugins read their user preferences (their table in `settings.toml`) from the
+//! [`crate::settings::SettingsStore`] global while rendering.
 
 use std::path::PathBuf;
 

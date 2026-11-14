@@ -6,6 +6,7 @@ version.workspace = true
 [dependencies]
 # ui
 gpui-kit = { workspace = true }
+tree-sitter-xml = { workspace = true }
 
 # script
 rquickjs = { workspace = true }

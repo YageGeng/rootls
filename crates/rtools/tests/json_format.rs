@@ -107,13 +107,6 @@ fn unescape_column_points_into_unquoted_input() {
 }
 
 #[test]
-fn array_len_counts_top_level_items_only() {
-    assert_eq!(Json("[1, [2, 3], {\"a\": 4}]").array_len(), Some(3));
-    assert_eq!(Json("{\"a\": 1}").array_len(), None);
-    assert_eq!(Json("not json").array_len(), None);
-}
-
-#[test]
 fn brief_error_text_leads_with_position() {
     let err = Rewrite::Format.apply("{\n  \"a\": 1,\n}").unwrap_err();
     assert!(

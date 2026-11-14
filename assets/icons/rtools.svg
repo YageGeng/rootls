@@ -11,9 +11,12 @@
   </defs>
   <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
   <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#sheen)"/>
-  <g fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M92 190V100"/>
-    <path d="M92 140c0-29 21-45 49-45h22"/>
+  <!-- Centers the glyph on the tile: its stroked bounds are x 81-204, y 84-201. -->
+  <g transform="translate(-14.5 -14.5)">
+    <g fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M92 190V100"/>
+      <path d="M92 140c0-29 21-45 49-45h22"/>
+    </g>
+    <circle cx="184" cy="178" r="20" fill="#FFFFFF"/>
   </g>
-  <circle cx="184" cy="178" r="20" fill="#FFFFFF"/>
 </svg>

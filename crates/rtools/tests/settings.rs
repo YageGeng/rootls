@@ -1,4 +1,4 @@
-use rtools::settings::{Language, Settings};
+use rtools::settings::{JsonSettings, Language, Settings};
 use std::fs;
 
 fn temp_file(name: &str) -> std::path::PathBuf {
@@ -13,7 +13,9 @@ fn defaults_follow_the_theme_and_system() {
     assert_eq!(settings.ui_font, None);
     assert_eq!(settings.mono_font, None);
     assert_eq!(settings.font_size, 16.);
+    assert_eq!(settings.window_radius, 4.);
     assert_eq!(settings.language, Language::System);
+    assert!(!settings.json.soft_wrap);
 }
 
 #[test]
@@ -22,10 +24,13 @@ fn toml_round_trips() {
         ui_font: Some("Inter".into()),
         mono_font: Some("JetBrains Mono".into()),
         font_size: 14.,
+        window_radius: 6.,
         language: Language::ZhCn,
+        json: JsonSettings { soft_wrap: true },
     };
     let text = settings.to_string();
     assert!(text.contains("language = \"zh-CN\""), "{text}");
+    assert!(text.contains("[json]\nsoft_wrap = true"), "{text}");
     assert_eq!(text.parse::<Settings>().unwrap(), settings);
 }
 
@@ -45,6 +50,13 @@ fn missing_fields_take_defaults() {
 fn font_size_is_clamped() {
     assert_eq!("font_size = 40".parse::<Settings>().unwrap().font_size, 20.);
     assert_eq!("font_size = 2".parse::<Settings>().unwrap().font_size, 12.);
+}
+
+#[test]
+fn window_radius_is_clamped() {
+    let radius = |text: &str| text.parse::<Settings>().unwrap().window_radius;
+    assert_eq!(radius("window_radius = 99"), 24.);
+    assert_eq!(radius("window_radius = -3"), 0.);
 }
 
 #[test]

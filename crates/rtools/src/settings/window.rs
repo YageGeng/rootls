@@ -7,6 +7,7 @@ use gpui_kit::component::input::{Input, InputEvent, InputState, NumberInput};
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::searchable_list::{SearchableListItem, SearchableVec};
 use gpui_kit::component::select::{Select, SelectEvent, SelectState};
+use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{
     ActiveTheme as _, Icon, Sizable as _, StyledExt as _, TitleBar, h_flex, v_flex,
 };
@@ -14,7 +15,9 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rust_i18n::t;
 
-use super::{FONT_SIZES, Language, Settings, SettingsStore};
+use std::ops::RangeInclusive;
+
+use super::{FONT_SIZES, Language, Settings, SettingsStore, WINDOW_RADII};
 
 actions!(settings_window, [CloseSettings]);
 
@@ -57,17 +60,20 @@ type LanguageChoices = Vec<Choice<Language>>;
 enum Page {
     Appearance,
     Language,
+    /// Options of the JSON editor plugin.
+    Json,
 }
 
 impl Page {
-    /// Every page, in sidebar order.
-    const ALL: [Page; 2] = [Page::Appearance, Page::Language];
+    /// Every page, in sidebar order: the app first, then plugins.
+    const ALL: [Page; 3] = [Page::Appearance, Page::Language, Page::Json];
 
     /// Translation keys of the page title and subtitle.
     fn keys(self) -> (&'static str, &'static str) {
         match self {
             Page::Appearance => ("settings.appearance", "settings.appearance_subtitle"),
             Page::Language => ("settings.language", "settings.language_subtitle"),
+            Page::Json => ("settings.json", "settings.json_subtitle"),
         }
     }
 }
@@ -78,18 +84,28 @@ enum Row {
     UiFont,
     MonoFont,
     FontSize,
+    WindowRadius,
     Language,
+    SoftWrap,
 }
 
 impl Row {
     /// Every row, in display order.
-    const ALL: [Row; 4] = [Row::UiFont, Row::MonoFont, Row::FontSize, Row::Language];
+    const ALL: [Row; 6] = [
+        Row::UiFont,
+        Row::MonoFont,
+        Row::FontSize,
+        Row::WindowRadius,
+        Row::Language,
+        Row::SoftWrap,
+    ];
 
     /// The page the row belongs to.
     fn page(self) -> Page {
         match self {
-            Row::UiFont | Row::MonoFont | Row::FontSize => Page::Appearance,
+            Row::UiFont | Row::MonoFont | Row::FontSize | Row::WindowRadius => Page::Appearance,
             Row::Language => Page::Language,
+            Row::SoftWrap => Page::Json,
         }
     }
 
@@ -111,10 +127,20 @@ impl Row {
                 "settings.font_size",
                 "settings.font_size_detail",
             ),
+            Row::WindowRadius => (
+                "settings.window",
+                "settings.window_radius",
+                "settings.window_radius_detail",
+            ),
             Row::Language => (
                 "settings.display",
                 "settings.interface_language",
                 "settings.interface_language_detail",
+            ),
+            Row::SoftWrap => (
+                "settings.editor",
+                "settings.soft_wrap",
+                "settings.soft_wrap_detail",
             ),
         }
     }
@@ -128,6 +154,8 @@ impl Row {
 
 /// Points a font dropdown at the setting it edits.
 type FontField = fn(&mut Settings) -> &mut Option<String>;
+/// Points a number box at the setting it edits.
+type NumberField = fn(&mut Settings) -> &mut f32;
 
 /// The settings page: sidebar plus the rows of the current page or search.
 pub struct SettingsWindow {
@@ -137,6 +165,7 @@ pub struct SettingsWindow {
     ui_font: Entity<SelectState<FontChoices>>,
     mono_font: Entity<SelectState<FontChoices>>,
     font_size: Entity<InputState>,
+    window_radius: Entity<InputState>,
     language: Entity<SelectState<LanguageChoices>>,
     /// Installed font families, sorted; enumerated once per window.
     font_names: Vec<SharedString>,
@@ -151,7 +180,7 @@ impl SettingsWindow {
     /// Builds the page from the settings in effect.
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let store = cx.global::<SettingsStore>();
-        let font_size_value = store.settings.font_size.to_string();
+        let (font_size, window_radius) = (store.settings.font_size, store.settings.window_radius);
         let path_label = match dirs::home_dir().and_then(|home| store.path.strip_prefix(home).ok())
         {
             Some(relative) => format!("~/{}", relative.display()),
@@ -170,13 +199,20 @@ impl SettingsWindow {
         let mono_font = cx.new(|cx| {
             SelectState::new(SearchableVec::new(Vec::new()), None, window, cx).searchable(true)
         });
-        let font_size = cx.new(|cx| {
-            InputState::new(window, cx)
-                .default_value(font_size_value)
-                .step(1.)
-                .min(f64::from(*FONT_SIZES.start()))
-                .max(f64::from(*FONT_SIZES.end()))
-        });
+        let number = |value: f32,
+                      range: &RangeInclusive<f32>,
+                      window: &mut Window,
+                      cx: &mut Context<Self>| {
+            cx.new(|cx| {
+                InputState::new(window, cx)
+                    .default_value(value.to_string())
+                    .step(1.)
+                    .min(f64::from(*range.start()))
+                    .max(f64::from(*range.end()))
+            })
+        };
+        let font_size = number(font_size, &FONT_SIZES, window, cx);
+        let window_radius = number(window_radius, &WINDOW_RADII, window, cx);
         let language = cx.new(|cx| SelectState::new(Vec::new(), None, window, cx));
 
         let font_fields: [(&Entity<SelectState<FontChoices>>, FontField); 2] = [
@@ -194,19 +230,27 @@ impl SettingsWindow {
                 })
             })
             .collect();
+        let number_fields: [(&Entity<InputState>, RangeInclusive<f32>, NumberField); 2] = [
+            (&font_size, FONT_SIZES, |settings| &mut settings.font_size),
+            (&window_radius, WINDOW_RADII, |settings| {
+                &mut settings.window_radius
+            }),
+        ];
+        subscriptions.extend(number_fields.into_iter().map(|(state, range, field)| {
+            cx.subscribe(state, move |_, state, event: &InputEvent, cx| {
+                // Partial input such as "1" while typing "18" is ignored until it is in range.
+                if matches!(event, InputEvent::Change)
+                    && let Ok(value) = state.read(cx).value().trim().parse::<f32>()
+                    && range.contains(&value)
+                {
+                    SettingsStore::update(cx, |settings| *field(settings) = value);
+                }
+            })
+        }));
         subscriptions.extend([
             cx.subscribe(&search, |_, _, event: &InputEvent, cx| {
                 if matches!(event, InputEvent::Change) {
                     cx.notify();
-                }
-            }),
-            cx.subscribe(&font_size, |_, state, event: &InputEvent, cx| {
-                // Partial input such as "1" while typing "18" is ignored until it is in range.
-                if matches!(event, InputEvent::Change)
-                    && let Ok(size) = state.read(cx).value().trim().parse::<f32>()
-                    && FONT_SIZES.contains(&size)
-                {
-                    SettingsStore::update(cx, |settings| settings.font_size = size);
                 }
             }),
             cx.subscribe(
@@ -218,8 +262,10 @@ impl SettingsWindow {
                     }
                 },
             ),
+            // Redraws switches and relabels the options after a language change.
             cx.observe_global_in::<SettingsStore>(window, |this, window, cx| {
                 this.relabel(window, cx);
+                cx.notify();
             }),
         ]);
 
@@ -230,6 +276,7 @@ impl SettingsWindow {
             ui_font,
             mono_font,
             font_size,
+            window_radius,
             language,
             font_names: font_names.into_iter().map(Into::into).collect(),
             path_label,
@@ -329,20 +376,38 @@ impl SettingsWindow {
                 .rounded(theme.radius)
                 .into_any_element()
         };
-        match row {
-            Row::UiFont => select_font(&self.ui_font),
-            Row::MonoFont => select_font(&self.mono_font),
-            Row::FontSize => NumberInput::new(&self.font_size)
+        let number = |state: &Entity<InputState>| {
+            NumberInput::new(state)
                 .appearance(false)
                 .bg(theme.secondary)
                 .rounded(theme.radius)
-                .into_any_element(),
+                .into_any_element()
+        };
+        match row {
+            Row::UiFont => select_font(&self.ui_font),
+            Row::MonoFont => select_font(&self.mono_font),
+            Row::FontSize => number(&self.font_size),
+            Row::WindowRadius => number(&self.window_radius),
             Row::Language => Select::new(&self.language)
                 .appearance(false)
                 .icon(IconName::ChevronsUpDown)
                 .bg(theme.secondary)
                 .rounded(theme.radius)
                 .into_any_element(),
+            Row::SoftWrap => {
+                let soft_wrap = cx.global::<SettingsStore>().settings.json.soft_wrap;
+                h_flex()
+                    .justify_end()
+                    .child(Switch::new("soft-wrap").checked(soft_wrap).on_click(
+                        |checked, _, cx| {
+                            let checked = *checked;
+                            SettingsStore::update(cx, |settings| {
+                                settings.json.soft_wrap = checked;
+                            });
+                        },
+                    ))
+                    .into_any_element()
+            }
         }
     }
 

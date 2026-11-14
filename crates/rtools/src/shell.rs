@@ -145,8 +145,9 @@ impl Shell {
         }
     }
 
-    /// Opens the borderless, transparent, client-decorated popup (layer-shell on
-    /// Wayland), reusing the launcher entity from earlier openings.
+    /// Opens the launcher, reusing its entity from earlier openings: on Wayland a
+    /// full-screen transparent overlay the launcher draws a movable panel into,
+    /// elsewhere a borderless popup around it.
     fn open_popup(cx: &mut App) {
         // The settings file and the system appearance may have changed while hidden.
         SettingsStore::reload(cx);
@@ -154,25 +155,31 @@ impl Shell {
         let registry = Rc::clone(&shell.registry);
         let data_root = shell.data_root.clone();
         let existing = shell.launcher.clone();
-        let options = WindowOptions {
-            kind: Self::popup_kind(cx),
-            titlebar: None,
-            window_background: WindowBackgroundAppearance::Transparent,
-            window_decorations: Some(WindowDecorations::Client),
-            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
-                None,
-                Launcher::INITIAL_SIZE,
-                cx,
-            ))),
-            app_id: Some(APP_ID.into()),
-            ..Default::default()
-        };
-        let opened = open_window(options, cx, |window, cx| {
+        let overlay = Self::overlay_options(cx);
+        let in_overlay = overlay.is_some();
+        let build = move |window: &mut Window, cx: &mut App| {
             let launcher = existing
                 .unwrap_or_else(|| cx.new(|cx| Launcher::new(registry, data_root, window, cx)));
-            launcher.update(cx, |launcher, cx| launcher.attach(window, cx));
+            launcher.update(cx, |launcher, cx| launcher.attach(in_overlay, window, cx));
             launcher
-        });
+        };
+        let opened = match overlay {
+            // Without a GPUI Kit root, which would paint an opaque surface and a
+            // window frame across the whole screen; the launcher draws its own panel.
+            Some(options) => {
+                let mut built = None;
+                cx.open_window(options, |window, cx| {
+                    let launcher = build(window, cx);
+                    built = Some(launcher.clone());
+                    launcher
+                })
+                .map(|handle| {
+                    let launcher = built.expect("open_window ran its build closure");
+                    (handle.into(), launcher)
+                })
+            }
+            None => open_window(Self::popup_options(cx), cx, build),
+        };
         match opened {
             Ok((popup, launcher)) => {
                 let shell = cx.global_mut::<Shell>();
@@ -183,27 +190,61 @@ impl Shell {
         }
     }
 
-    /// Wayland needs layer-shell for a centered, always-on-top surface.
-    #[cfg(target_os = "linux")]
-    fn popup_kind(cx: &App) -> WindowKind {
-        use gpui_kit::layer_shell::{Anchor, KeyboardInteractivity, Layer, LayerShellOptions};
-        if cx.compositor_name() == "Wayland" {
-            WindowKind::LayerShell(LayerShellOptions {
-                namespace: "rtools".into(),
-                layer: Layer::Overlay,
-                anchor: Anchor::empty(),
-                keyboard_interactivity: KeyboardInteractivity::OnDemand,
-                ..Default::default()
-            })
-        } else {
-            WindowKind::PopUp
+    /// A borderless, transparent, client-decorated popup, sized to the launcher
+    /// once it lays out.
+    fn popup_options(cx: &App) -> WindowOptions {
+        WindowOptions {
+            kind: WindowKind::PopUp,
+            titlebar: None,
+            window_background: WindowBackgroundAppearance::Transparent,
+            window_decorations: Some(WindowDecorations::Client),
+            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                None,
+                Launcher::INITIAL_SIZE,
+                cx,
+            ))),
+            app_id: Some(APP_ID.into()),
+            ..Default::default()
         }
     }
 
-    /// Other platforms position a pop-up window themselves.
+    /// Wayland: a transparent layer-shell surface over the whole primary screen,
+    /// above the panels. `None` elsewhere, where a popup can be placed and moved.
+    #[cfg(target_os = "linux")]
+    fn overlay_options(cx: &App) -> Option<WindowOptions> {
+        use gpui_kit::layer_shell::{Anchor, KeyboardInteractivity, Layer, LayerShellOptions};
+        if cx.compositor_name() != "Wayland" {
+            return None;
+        }
+        // GPUI on Wayland reports no primary display, so the first output is used.
+        // ponytail: follow the focused output if multi-monitor setups need it.
+        let Some(display) = cx.displays().into_iter().next() else {
+            tracing::warn!("no display reported; the launcher falls back to a fixed popup");
+            return None;
+        };
+        Some(WindowOptions {
+            kind: WindowKind::LayerShell(LayerShellOptions {
+                namespace: "rtools".into(),
+                layer: Layer::Overlay,
+                anchor: Anchor::TOP | Anchor::BOTTOM | Anchor::LEFT | Anchor::RIGHT,
+                // Ignores the panels' reserved space, so the launcher centers on the screen.
+                exclusive_zone: Some(px(-1.)),
+                keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                ..Default::default()
+            }),
+            titlebar: None,
+            window_background: WindowBackgroundAppearance::Transparent,
+            window_bounds: Some(WindowBounds::Windowed(display.bounds())),
+            display_id: Some(display.id()),
+            app_id: Some(APP_ID.into()),
+            ..Default::default()
+        })
+    }
+
+    /// Other platforms place and move a popup window themselves.
     #[cfg(not(target_os = "linux"))]
-    fn popup_kind(_: &App) -> WindowKind {
-        WindowKind::PopUp
+    fn overlay_options(_: &App) -> Option<WindowOptions> {
+        None
     }
 }
 

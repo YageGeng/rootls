@@ -8,7 +8,8 @@ version = "0.1.0"
 
 [workspace.dependencies]
 # ui
-gpui-kit = { version = "0.9.1", features = ["syntect"] }
+gpui-kit = { version = "0.9.1", features = ["tree-sitter"] }
+tree-sitter-xml = "0.7"
 
 # script
 rquickjs = "0.14"

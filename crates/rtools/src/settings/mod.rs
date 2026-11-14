@@ -17,6 +17,8 @@ use crate::theme;
 
 /// Accepted UI font sizes in pixels; values outside are clamped.
 pub const FONT_SIZES: RangeInclusive<f32> = 12.0..=20.0;
+/// Accepted window corner radii in pixels; values outside are clamped.
+pub const WINDOW_RADII: RangeInclusive<f32> = 0.0..=24.0;
 
 /// Everything the user can change in the settings window.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -30,18 +32,34 @@ pub struct Settings {
     pub mono_font: Option<String>,
     /// Base UI font size in pixels (the rem size), within [`FONT_SIZES`].
     pub font_size: f32,
+    /// Corner radius of the launcher and the other client-drawn windows, within
+    /// [`WINDOW_RADII`].
+    pub window_radius: f32,
     /// Interface language.
     pub language: Language,
+    /// The `[json]` table; kept last because TOML writes tables after plain keys.
+    pub json: JsonSettings,
+}
+
+/// Options of the JSON editor plugin.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct JsonSettings {
+    /// Wrap long lines in both editors; wrapping measures every line, which
+    /// stalls on very large documents.
+    pub soft_wrap: bool,
 }
 
 impl Default for Settings {
-    /// Theme fonts, 16 px and the system language.
+    /// Theme fonts, 16 px, 4 px window corners, the system language and no soft wrap.
     fn default() -> Self {
         Self {
             ui_font: None,
             mono_font: None,
             font_size: 16.,
+            window_radius: 4.,
             language: Language::System,
+            json: JsonSettings::default(),
         }
     }
 }
@@ -49,12 +67,16 @@ impl Default for Settings {
 impl FromStr for Settings {
     type Err = toml::de::Error;
 
-    /// Parses settings TOML; missing fields take their defaults.
+    /// Parses settings TOML; missing fields take their defaults and sizes are
+    /// clamped to their ranges.
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let mut settings: Settings = toml::from_str(text)?;
         settings.font_size = settings
             .font_size
             .clamp(*FONT_SIZES.start(), *FONT_SIZES.end());
+        settings.window_radius = settings
+            .window_radius
+            .clamp(*WINDOW_RADII.start(), *WINDOW_RADII.end());
         Ok(settings)
     }
 }

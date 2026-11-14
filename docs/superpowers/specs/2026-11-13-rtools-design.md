@@ -16,7 +16,7 @@ rtools 用 Rust + GPUI（gpui-kit）实现同类启动器，第一个插件复�
 | 定位 | 类 uTools 启动器平台，JSON 是第一个插件 |
 | 插件模型 | 内置插件：Rust `Plugin` trait，编译进同一二进制 |
 | 平台 | Linux（Wayland + X11）、macOS、Windows |
-| 窗口形态 | uTools 式弹窗（无边框、居中、置顶、失焦隐藏），插件可分离为普通窗口 |
+| 窗口形态 | uTools 式弹窗（无边框、每次呼出居中、可拖动、插件视图可调整大小、置顶、失焦或点击面板外隐藏），插件可分离为普通窗口 |
 | 工程结构 | Cargo workspace；`rtools-json` 放在 `plugins/` 下，核心逻辑以模块边界隔离 |
 | JSON 插件 v1 范围 | 必做功能 + 格式转换（JSON 转 XML）+ 粘贴自动识别（URL Params / XML / YAML） |
 | 编码规范 | 遵守仓库根目录 `AGENTS.md` |
@@ -36,7 +36,7 @@ rtools 用 Rust + GPUI（gpui-kit）实现同类启动器，第一个插件复�
 - JSON 转 TypeScript
 - 本地应用启动、超级面板、拼音匹配、第三方/动态插件、托盘图标、开机自启、设置界面
 - 左右分栏可拖动调整宽度
-- 代码折叠与全部折叠/展开（gpui-kit 0.9.1 + syntect 下不可用，见 §8 S2）
+- 全部折叠/展开（gpui-kit 0.9.1 没有公开接口，见 §8 S2；单个折叠由 tree-sitter 高亮提供，见 §5.1）
 
 ## 2. 工程结构（2026-11-14 用户决定：插件不再拆 crate）
 
@@ -50,7 +50,7 @@ crates/rtools/
   locales/app.yml          # rust-i18n 翻译
   tests/                   # 全部集成测试
 assets/icons/              # 应用与托盘图标
-packaging/linux/           # .desktop、图标渲染脚本
+packaging/linux/           # .desktop、用户级安装脚本 install.sh
 ```
 
 所有插件先写在 `rtools` crate 内，通过 `plugin` 模块的 `Plugin` trait 解耦；将来需要独立 crate 时只搬模块。
@@ -61,7 +61,7 @@ packaging/linux/           # .desktop、图标渲染脚本
 
 | 分组 | 依赖 |
 |---|---|
-| ui | `gpui-kit`（feature `syntect`） |
+| ui | `gpui-kit`（feature `tree-sitter`：JSON 高亮与折叠）、`tree-sitter-xml`（XML 结果高亮，GPUI Kit 未内置 XML 语法） |
 | script | `rquickjs` |
 | data formats | `form_urlencoded`、`image`（托盘图标 PNG 解码）、`quick-xml`、`serde`、`serde-saphyr`（YAML 反序列化为 `serde_json::Value`）、`serde_json`（feature `preserve_order`、`arbitrary_precision`）、`toml`（设置文件） |
 | platform | `dirs`、`evdev`（仅 Linux）、`interprocess`、`ksni`（仅 Linux）、`rdev`（仅 macOS/Windows）、`sys-locale`、`tray-icon`（仅 macOS/Windows） |
@@ -127,17 +127,17 @@ pub struct PluginRegistry { plugins: Vec<Box<dyn Plugin>> }
 
 | 平台 | 弹窗 | 快捷键 |
 |---|---|---|
-| Linux Wayland | `WindowKind::LayerShell`，不锚定（居中），键盘交互 `OnDemand`（点击别处会失焦，才能触发隐藏） | **双击 Ctrl**：读 `/dev/input`（evdev，用户需在 `input` 组） |
-| Linux X11 | `WindowKind::PopUp`，无标题栏，在鼠标所在屏幕居中 | **双击 Ctrl**：evdev |
+| Linux Wayland | 全屏透明 `WindowKind::LayerShell` 覆盖层（四边锚定、`exclusive_zone = -1`、取第一个输出屏幕，键盘交互 `OnDemand`），不经 GPUI Kit 的窗口根（否则整屏不透明并带窗口边框），启动器在其中自绘面板：每次呼出屏幕正中（插件视图按自身高度居中，列表按显示时的高度居中，输入过滤改变行数时顶边不动），拖插件标题栏或列表底栏移动；插件视图可拖四边与四角（面板外 0.5 rem 的感应带）调整大小，最小 30×20 rem，大小在本次运行内保留，列表始终保持自身默认宽度；点面板外即隐藏（2026-11-14：layer-shell 表面创建后无法移动，原「不锚定居中」方案也因 GPUI 按去掉阴影内边距的尺寸设置表面大小而偏右下） | **双击 Ctrl**：读 `/dev/input`（evdev，用户需在 `input` 组） |
+| Linux X11 | `WindowKind::PopUp`，无标题栏，在鼠标所在屏幕居中；拖标题栏或底栏交给系统移动窗口 | **双击 Ctrl**：evdev |
 | macOS / Windows | 同上 | **双击 Ctrl**：`rdev` 全局键盘监听（macOS 需在系统设置授予「辅助功能」权限） |
 
 **不注册任何组合键作为退路**（用户 2026-11-13 明确：Linux 上 `Alt+Space` 是 KRunner 的默认快捷键，坚决不能占用）。双击 Ctrl 不可用时只记日志，提示加入 `input` 组 / 授予权限 / 自行把快捷键绑定到 `rtools toggle`。
 
 **双击 Ctrl 的判定**（2026-11-13 用户决定）：一次「单击」= Ctrl 按下到松开不超过 300 ms，且期间没有按其他键；第二次单击的按下距第一次松开不超过 350 ms 即触发。按住时的自动重复忽略；左右 Ctrl 等价。键盘事件只用于这一判定，绝不记录或保存任何按键。加入 `input` 组意味着该用户的所有程序都能读取键盘输入，这是用户知情后的选择。
 
-所有窗口的 Wayland `app_id` 为 `dev.rtools.rtools`，与仓库中的 `packaging/linux/dev.rtools.rtools.desktop` 对应，桌面据此显示名称并归组窗口。
+所有窗口的 Wayland `app_id` 为 `dev.rtools.rtools`，与仓库中的 `packaging/linux/dev.rtools.rtools.desktop` 对应，桌面据此显示名称并归组窗口。`packaging/linux/install.sh` 安装到用户目录：剥离符号的二进制（`~/.local/bin/rtools`）、`.desktop`，以及以同名 `dev.rtools.rtools` 安装进 hicolor 的应用图标（scalable SVG + 32/256 PNG）。
 
-已知 GPUI 问题：Wayland 启动时 `displays()` 为空，layer-shell 窗口无法指定输出屏幕（zed-industries/zed#46378）。v1 接受由合成器决定屏幕。
+已知 GPUI 问题：Wayland 下 `primary_display()` 恒为 `None`，覆盖层改用 `displays()` 的第一项；多屏时不跟随焦点屏幕（代码处有 `ponytail:` 注释）。
 
 ### 4.5 系统托盘（2026-11-13 用户追加，图标方案 C「r.」已确认）
 
@@ -145,15 +145,15 @@ pub struct PluginRegistry { plugins: Vec<Box<dyn Plugin>> }
 - **图标**（`assets/icons/`）：
   - `rtools.svg`：彩色应用图标（蓝 `#2563EB` → 青 `#06B6D4` 渐变圆角方块 + 白色「r.」），用于 `.desktop`、窗口列表、macOS/Windows 托盘。
   - `rtools-tray.svg`：单色面板字形（22px 像素网格、笔画 2.2px），使用 KDE `ColorScheme-Text` 类，随面板明暗自动着色。
-  - 预渲染 PNG（`rtools-tray-22.png`、`rtools-tray-44.png`、`rtools-32.png`、`rtools-256.png`），由 `packaging/render-icons.sh`（`rsvg-convert`）生成。
+  - 预渲染 PNG（`rtools-22.png`、`rtools-32.png`、`rtools-44.png`、`rtools-256.png`、macOS 模板图 `rtools-tray-template-44.png`），由 `packaging/render-icons.sh`（`rsvg-convert`）生成。两个 SVG 的字形都按描边外框几何居中。
 - **Linux**：`ksni`（StatusNotifierItem，D-Bus，无 GTK，`async-io`）。程序把内嵌的 `rtools-tray.svg` 写到 `<data_root>/icons/hicolor/scalable/apps/dev.rtools.rtools-tray.svg`，`icon_theme_path` 指向 `<data_root>/icons`，`icon_name` 为 `dev.rtools.rtools-tray`；同时提供 22/44px pixmap 兜底。
 - **macOS / Windows**：`tray-icon`；macOS 用单色字形作模板图，Windows 用 32px 彩色图标。本机无法验证。
 - **失败**：托盘创建失败只记 `tracing::warn!`，双击 Ctrl 与 `rtools toggle` 不受影响。
 
 ### 4.6 设置（2026-11-14，视觉见 §5.7「设置窗口」）
 
-- 文件：`dirs::config_dir()/rtools/settings.toml`（`toml` + `serde`），字段：`ui_font`、`mono_font`（`Option<String>`，缺省跟随主题）、`font_size`（12–20，默认 16）、`language`（`system` / `zh-CN` / `en`）。缺字段用默认值；文件损坏时 `tracing::warn!` 并用默认值，不覆盖原文件。
-- 应用：`Theme::update` 设置 `font_family`、`mono_font_family`、`font_size`（即 rem），`i18n` 切换语言；修改立即生效并写回文件。
+- 文件：`dirs::config_dir()/rtools/settings.toml`（`toml` + `serde`），字段：`ui_font`、`mono_font`（`Option<String>`，缺省跟随主题）、`font_size`（12–20，默认 16）、`window_radius`（窗口圆角，0–24，默认 4）、`language`（`system` / `zh-CN` / `en`），以及插件分组 `[json]`：`soft_wrap`（JSON 编辑器自动换行，默认关）。缺字段用默认值，越界数值收进范围；文件损坏时 `tracing::warn!` 并用默认值，不覆盖原文件。
+- 应用：`Theme::update` 设置 `font_family`、`mono_font_family`、`font_size`（即 rem）、`window_radius`，`i18n` 切换语言；插件在渲染时读取 `SettingsStore` 中自己的分组。修改立即生效并写回文件。
 - 入口：托盘菜单「设置…」、启动器「系统」分组「设置」。设置窗口是普通窗口（自绘标题栏），单实例：已打开时只激活。
 
 ### 4.7 国际化（2026-11-14）
@@ -177,7 +177,7 @@ pub struct PluginRegistry { plugins: Vec<Box<dyn Plugin>> }
 ┌─────────────────────────────┬─────────────────────────────┐
 │ Editor (editable)           │ Editor (readonly, gray bg)  │
 │ line numbers ·              │ filter / conversion result  │
-│ search · syntect json       │                             │
+│ search · tree-sitter json   │                             │
 ├─────────────────────────────┴─────────────────────────────┤
 │ this│ filter input……………………   {} ⊘ │ ≑ " <> ⧉            │
 │ status line                                               │
@@ -199,6 +199,11 @@ pub struct PluginRegistry { plugins: Vec<Box<dyn Plugin>> }
 - 转换结果显示在右侧，不覆盖左侧原文。过滤框有表达式时，转换的对象是过滤后的结果。
 - 格式化、压缩、转义、去转义原地改写左侧，**必须可撤销**：使用 `EditorState::replace_all`（记入撤销历史，S2 已确认），不用会清空历史的 `set_value`。
 - 状态栏显示解析错误位置（行:列）、执行超时、转换类型等信息。
+- 不阻塞界面：整文档粘贴（及启动器带入的内容）的识别转换、工具栏改写、转 XML、文档校验都在后台线程执行；结果按编辑版本号落地，期间若左侧又被编辑则丢弃，不覆盖新的输入。
+- XML 结果高亮：插件首次打开时向 GPUI Kit 的 `LanguageRegistry` 注册 `xml`（`tree-sitter-xml`），右侧随结果切换 `json` / `xml`（不用内置 HTML 语法：标签名里的 `_` 会断开）。
+- 高亮与折叠（2026-11-14 由 syntect 改为 tree-sitter）：对象与数组跨 3 行以上即可折叠（syntect 后端只按 `{}` 计算折叠）；首次高亮 10.9 MB 由 1.72 s 降到 0.77 s，编辑后增量重解析。
+- 搜索（2026-11-14）：两侧编辑器都开启 GPUI Kit 内置搜索栏，`Ctrl+F`（macOS `Cmd+F`）打开；左侧可编辑，搜索栏带「替换」切换（也可 `Ctrl+H` 直接进入替换），右侧只读只有搜索。`Esc` 先关闭打开的搜索栏（GPUI Kit 的输入框会把 `Esc` 用于移动焦点，故在插件视图上以捕获阶段处理）。
+- 自动换行由设置 `[json] soft_wrap` 控制，默认关闭：开启时编辑器每次整文档替换都要测量每一行（5 MB 文档约 1.9 秒，在界面线程上）。
 
 ### 5.2 过滤引擎（`plugins/json/core/filter.rs`，`FilterEngine`）
 
@@ -213,7 +218,7 @@ pub struct PluginRegistry { plugins: Vec<Box<dyn Plugin>> }
   - 中断回调：用户表达式单次执行超过 2 秒即中断，返回「执行超时」。文档的 `JSON.parse` 不计入超时（耗时只与文档大小有关、不会死循环），否则大文件上过滤会永远超时
   - 内存上限 1 GiB
   - 输入停顿 200ms 后才求值
-  - 每个请求带递增序号，界面丢弃过时结果
+  - 新请求替换旧的求值任务（任务被丢弃即取消），只有最新的结果会落到界面
 - **已知限制**：超过 2^53 的整数丢精度，代码处加 `ponytail:` 注释标明，后续做 BigInt 时从此处升级。
 
 ### 5.3 格式化（`plugins/json/core/format.rs`，`Json` / `Pretty` / `Rewrite`）
@@ -272,10 +277,10 @@ pub struct PluginRegistry { plugins: Vec<Box<dyn Plugin>> }
 
 **JSON 插件**
 - 左右两个 `Editor` 都 `bordered(false)` + `appearance(false)`，与窗口同一底色；右侧结果栏以左分隔线区分。
-- 结果栏标题行（`h_8`，下分隔线）：`text_xs` muted 标题（「过滤结果」或「XML」）+「· N 项」（结果为数组时）+ 右侧 ghost 超小号「复制」按钮（copy 图标）。
+- 结果栏不设标题行（2026-11-14 用户决定）：直接是只读编辑器；复制由底部工具栏的 `⧉` 负责（右侧显示结果时复制结果，否则复制左侧原文）。
 - 底栏：过滤 `Input`（小号、等宽字体、前缀为 muted 等宽「this」）占满剩余宽度；右侧 ghost 小号**文字**按钮，分三组并以竖分隔线隔开：格式化 / 压缩 | 转义 / 去转义 | 转 XML。
 - 左侧 JSON 错误：编辑器底部一条提示（上分隔线、`text_xs`、danger 色 + `circle-alert` 图标），文字「第 L 行第 C 列：消息」。
-- 过滤/转换错误：结果栏居中显示 danger 图标 + 标题（如「表达式错误」）+ muted 详情；此时标题行不显示项数与复制。
+- 过滤/转换错误：结果栏居中显示 danger 图标 + 标题（如「表达式错误」）+ muted 详情。
 - 编辑器行号栏底色与正文一致：主题层把 `highlight_theme.style.editor_background` 与 `editor_gutter_background` 设为 `background`，每次明暗切换后重新应用。
 
 **全局统一规则（2026-11-14 经对照 Zed 确认）**
@@ -285,7 +290,7 @@ pub struct PluginRegistry { plugins: Vec<Box<dyn Plugin>> }
 - 普通窗口（设置、分离插件）用 `WindowDecorations::Client` + gpui-kit `TitleBar`，标题栏左侧留空。
 - JSON 插件工具栏：ghost 图标按钮 + tooltip（`list-indent-increase` 格式化、`fold-vertical` 压缩、`quote` 转义、`remove-formatting` 去转义、`code-xml` 转为 XML）。
 
-**设置窗口**：左侧 `w_64` 侧边栏（搜索框、导航「外观 / 语言」、底部 `Esc 关闭`）；右侧 `px_8`：顶行设置文件路径（等宽 muted）+ 描边按钮「在设置文件中编辑」，页标题与副标题，分组标题（`text_sm` muted + 下分隔线），每项一行（标题 + 说明 | `w_56` 控件栏，`py_5`，下分隔线）。
+**设置窗口**：左侧 `w_64` 侧边栏（搜索框、导航「外观 / 语言 / JSON 编辑器」、底部 `Esc 关闭`）；右侧 `px_8`：顶行设置文件路径（等宽 muted）+ 描边按钮「在设置文件中编辑」，页标题与副标题，分组标题（`text_sm` muted + 下分隔线），每项一行（标题 + 说明 | `w_56` 控件栏，`py_5`，下分隔线）。
 
 ## 6. 错误处理与日志
 

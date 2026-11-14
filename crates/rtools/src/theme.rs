@@ -8,8 +8,8 @@ use gpui_kit::{App, px};
 use crate::settings::Settings;
 
 /// Follows the system light/dark appearance, then applies the user's fonts and
-/// rtools' theme tokens on top; call again whenever either may have changed,
-/// because a theme change rebuilds these fields from the base theme.
+/// window radius and rtools' theme tokens on top; call again whenever either may
+/// have changed, because a theme change rebuilds these fields from the base theme.
 pub fn apply(settings: &Settings, cx: &mut App) {
     Theme::sync_system_appearance(None, cx);
     Theme::update(cx, |theme| {
@@ -29,8 +29,7 @@ pub fn apply(settings: &Settings, cx: &mut App) {
         theme.mono_font_size =
             defaults.mono_font_size * (settings.font_size / f32::from(defaults.font_size));
         theme.font_size = px(settings.font_size);
-        // Theme token (not a call-site literal): floating window corner radius.
-        theme.window_radius = px(12.);
+        theme.window_radius = px(settings.window_radius);
         // Editors and their line-number gutters share the window background so
         // the plugin reads as one surface.
         let mut highlight = (*theme.highlight_theme).clone();

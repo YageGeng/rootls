@@ -5,13 +5,12 @@ use std::time::Duration;
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{Editor, EditorState, Input, InputEvent, InputState};
+use gpui_kit::component::input::{Editor, EditorState, Escape, Input, InputEvent, InputState};
 use gpui_kit::component::separator::Separator;
 use gpui_kit::component::{ActiveTheme as _, Icon, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rust_i18n::t;
-
 use serde_json::Value;
 
 use crate::plugin::Launch;
@@ -19,6 +18,7 @@ use crate::plugins::json::core::convert::xml::AsXml;
 use crate::plugins::json::core::{
     Draft, FILTER_TIMEOUT, FilterEngine, Json, JsonError, Normalized, Rewrite,
 };
+use crate::settings::SettingsStore;
 
 /// Pause after the last filter keystroke before evaluating.
 const FILTER_DEBOUNCE: Duration = Duration::from_millis(200);
@@ -27,31 +27,12 @@ const SYNC_DEBOUNCE: Duration = Duration::from_millis(300);
 /// Pause after the last source edit before writing the draft.
 const SAVE_DEBOUNCE: Duration = Duration::from_secs(1);
 
-/// A successful result: cheap-to-clone text and its top-level item count.
-struct Shown {
-    text: SharedString,
-    /// Set for filter results that are arrays.
-    count: Option<usize>,
-}
-
-impl From<String> for Shown {
-    /// Wraps filter output, counting top-level items when it is an array; run
-    /// it off the UI thread, since counting parses the whole text.
-    fn from(text: String) -> Self {
-        let count = Json(&text).array_len();
-        Self {
-            text: text.into(),
-            count,
-        }
-    }
-}
-
 /// What the result pane shows.
 enum ResultPane {
     Hidden,
     /// The latest filter outcome, `JsonPluginView::filtered`.
     Filter,
-    Xml(Result<Shown, JsonError>),
+    Xml(Result<SharedString, JsonError>),
 }
 
 /// The JSON plugin's root view.
@@ -63,12 +44,18 @@ pub struct JsonPluginView {
     draft: Arc<Draft>,
     pane: ResultPane,
     /// Outcome of the active filter; `None` while the filter is empty.
-    filtered: Option<Result<Shown, JsonError>>,
+    filtered: Option<Result<SharedString, JsonError>>,
     doc_error: Option<JsonError>,
+    /// Counts source edits; background results computed from an older
+    /// revision are dropped instead of overwriting newer edits.
+    revision: u64,
+    /// Background output waiting to replace the source, with the revision it
+    /// was computed from; applied by `sync_editors`.
+    pending_source: Option<(u64, String)>,
     /// The result pane changed and the read-only editor still shows old text.
-    /// `render` refreshes it because only render knows the view's current
-    /// window: the view outlives popup windows, so a task cannot hold one.
     right_dirty: bool,
+    /// Soft wrap as last applied to both editors.
+    soft_wrap: bool,
     /// The source changed since the draft was last written.
     unsaved: bool,
     filter_task: Task<()>,
@@ -76,6 +63,9 @@ pub struct JsonPluginView {
     eval_task: Task<()>,
     sync_task: Task<()>,
     save_task: Task<()>,
+    /// Background paste normalization or toolbar rewrite.
+    rewrite_task: Task<()>,
+    xml_task: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -83,47 +73,34 @@ impl JsonPluginView {
     /// Builds the view; content comes from the launch input, else the draft.
     pub(super) fn new(launch: Launch, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let draft = Arc::new(Draft::new(&launch.data_dir));
-        let has_input = launch.input.is_some();
-        let (content, doc_error) = match launch.input {
-            Some(input) => match input.parse::<Normalized>() {
-                // Normalized output is pretty-printed JSON, so it is valid already.
-                Ok(Normalized(text)) => (text, None),
-                // Kept verbatim; the editor reports where it stops being JSON.
-                Err(_) => {
-                    let error = Json(&input).validate().err();
-                    (input, error)
-                }
-            },
-            None => {
-                let draft_text = draft
-                    .load()
-                    .unwrap_or_else(|err| {
-                        tracing::warn!("reading the JSON draft failed: {}", err);
-                        None
-                    })
-                    .unwrap_or_default();
-                let error = Json(&draft_text).validate().err();
-                (draft_text, error)
-            }
+        // Launch input takes the whole-document paste path below, so the editor
+        // starts empty rather than with the draft it replaces.
+        let content = match launch.input {
+            Some(_) => String::new(),
+            None => draft
+                .load()
+                .unwrap_or_else(|err| {
+                    tracing::warn!("reading the JSON draft failed: {}", err);
+                    None
+                })
+                .unwrap_or_default(),
         };
         let engine = FilterEngine::spawn()
             .map_err(|err| tracing::error!("starting the filter engine failed: {}", err))
             .ok();
-        if let Some(engine) = &engine {
-            engine.set_document(Arc::from(content.as_str()));
-        }
 
-        let left = cx.new(|cx| {
+        let soft_wrap = cx.global::<SettingsStore>().settings.json.soft_wrap;
+        // Both editors open the built-in search panel on Ctrl+F (Cmd+F); the
+        // panel offers replace (also Ctrl+H) only where the text is editable.
+        let editor = |window: &mut Window, cx: &mut Context<EditorState>| {
             EditorState::new(window, cx)
                 .language("json")
                 .line_number(true)
-                .default_value(content)
-        });
-        let right = cx.new(|cx| {
-            EditorState::new(window, cx)
-                .language("json")
-                .line_number(true)
-        });
+                .soft_wrap(soft_wrap)
+                .searchable(true)
+        };
+        let left = cx.new(|cx| editor(window, cx).default_value(content));
+        let right = cx.new(|cx| editor(window, cx));
         let filter =
             cx.new(|cx| InputState::new(window, cx).placeholder(t!("json.filter_placeholder")));
         left.update(cx, |state, cx| state.focus(window, cx));
@@ -139,6 +116,8 @@ impl JsonPluginView {
                     this.on_filter_changed(cx);
                 }
             }),
+            // Redraws so `render` picks up a changed soft-wrap preference.
+            cx.observe_global::<SettingsStore>(|_, cx| cx.notify()),
             // Pending edits must reach the draft even when the app quits or the
             // view goes away before the save debounce fires.
             cx.on_app_quit(|this, cx| {
@@ -156,18 +135,23 @@ impl JsonPluginView {
             draft,
             pane: ResultPane::Hidden,
             filtered: None,
-            doc_error,
+            doc_error: None,
+            revision: 0,
+            pending_source: None,
             right_dirty: false,
+            soft_wrap,
             unsaved: false,
             filter_task: Task::ready(()),
             eval_task: Task::ready(()),
             sync_task: Task::ready(()),
             save_task: Task::ready(()),
+            rewrite_task: Task::ready(()),
+            xml_task: Task::ready(()),
             _subscriptions: subscriptions,
         };
-        // Launch input replaces the previous draft, so persist it like an edit.
-        if has_input {
-            view.schedule_save(cx);
+        match launch.input {
+            Some(input) => view.load_pasted(input, cx),
+            None => view.schedule_sync(Duration::ZERO, cx),
         }
         view
     }
@@ -179,14 +163,12 @@ impl JsonPluginView {
 
     /// Reacts to a source edit: save later, re-validate and re-filter after a pause.
     fn on_source_changed(&mut self, cx: &mut Context<Self>) {
+        self.revision += 1;
         self.schedule_save(cx);
         if matches!(self.pane, ResultPane::Xml(_)) {
             self.show(ResultPane::Hidden, cx);
         }
-        self.sync_task = cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(SYNC_DEBOUNCE).await;
-            let _ = this.update(cx, |this, cx| this.sync_document(cx));
-        });
+        self.schedule_sync(SYNC_DEBOUNCE, cx);
         cx.notify();
     }
 
@@ -225,19 +207,33 @@ impl JsonPluginView {
         }
     }
 
-    /// Validates the source, hands it to the engine and refreshes an active filter.
-    fn sync_document(&mut self, cx: &mut Context<Self>) {
-        // ponytail: validation runs on the UI thread (~20 ms for 4.5 MB in release);
-        // move it to the background executor if larger documents become common.
-        let text = self.left.read(cx).value();
-        self.doc_error = Json(&text).validate().err();
-        if let Some(engine) = &self.engine {
-            engine.set_document(text.into());
-        }
-        if !self.filter_text(cx).trim().is_empty() {
-            self.run_filter(cx);
-        }
-        cx.notify();
+    /// After `delay`, validates the source and hands it to the filter engine off
+    /// the UI thread, then refreshes an active filter; a newer call supersedes it.
+    fn schedule_sync(&mut self, delay: Duration, cx: &mut Context<Self>) {
+        self.sync_task = cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(delay).await;
+            let Ok(rope) = this.update(cx, |this, cx| this.left.read(cx).text().clone()) else {
+                return;
+            };
+            let (text, error) = cx
+                .background_executor()
+                .spawn(async move {
+                    let text: Arc<str> = rope.to_string().into();
+                    let error = Json(&text).validate().err();
+                    (text, error)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.doc_error = error;
+                if let Some(engine) = &this.engine {
+                    engine.set_document(text);
+                }
+                if !this.filter_text(cx).trim().is_empty() {
+                    this.run_filter(cx);
+                }
+                cx.notify();
+            });
+        });
     }
 
     /// Debounces filter keystrokes; an empty filter hides its result.
@@ -266,20 +262,16 @@ impl JsonPluginView {
         };
         let pending = engine.evaluate(&self.filter_text(cx));
         self.eval_task = cx.spawn(async move |this, cx| {
-            let result = pending.await;
-            let shown = cx
-                .background_executor()
-                .spawn(async move { result.map(Shown::from) })
-                .await;
+            let result = pending.await.map(SharedString::from);
             let _ = this.update(cx, |this, cx| {
-                this.filtered = Some(shown);
+                this.filtered = Some(result);
                 this.show(ResultPane::Filter, cx);
             });
         });
     }
 
     /// The result the pane shows, if any.
-    fn shown_result(&self) -> Option<&Result<Shown, JsonError>> {
+    fn shown_result(&self) -> Option<&Result<SharedString, JsonError>> {
         match &self.pane {
             ResultPane::Hidden => None,
             ResultPane::Filter => self.filtered.as_ref(),
@@ -287,82 +279,157 @@ impl JsonPluginView {
         }
     }
 
-    /// Replaces the result pane; the read-only editor is refreshed on the next frame.
+    /// Replaces the result pane; the read-only editor follows in `sync_editors`.
     fn show(&mut self, pane: ResultPane, cx: &mut Context<Self>) {
         self.pane = pane;
         self.right_dirty = true;
         cx.notify();
     }
 
-    /// Copies the pane's text into the read-only editor.
-    fn push_result(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.right_dirty = false;
-        let text = match self.shown_result() {
-            Some(Ok(shown)) => shown.text.clone(),
-            _ => SharedString::default(),
-        };
-        self.right
-            .update(cx, |state, cx| state.set_value(text, window, cx));
-    }
-
-    /// Runs a toolbar rewrite; success replaces the source as one undoable edit.
-    fn rewrite(&mut self, rewrite: Rewrite, window: &mut Window, cx: &mut Context<Self>) {
-        let text = self.left.read(cx).value();
-        match rewrite.apply(&text) {
-            Ok(rewritten) => self
-                .left
-                .update(cx, |state, cx| state.replace_all(rewritten, window, cx)),
-            Err(err) => {
-                self.doc_error = Some(err);
-                cx.notify();
+    /// Brings both editors up to date with the view: the soft-wrap preference,
+    /// background output for the source and the result pane. Runs deferred
+    /// from `render`, the one place that knows the view's current window: the
+    /// view outlives popup windows, so a task cannot hold one.
+    fn sync_editors(&mut self, soft_wrap: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if soft_wrap != self.soft_wrap {
+            self.soft_wrap = soft_wrap;
+            for editor in [&self.left, &self.right] {
+                editor.update(cx, |state, cx| state.set_soft_wrap(soft_wrap, window, cx));
             }
         }
+        // Output computed from an older revision would undo the edits made since.
+        if let Some((revision, text)) = self.pending_source.take()
+            && revision == self.revision
+        {
+            self.left
+                .update(cx, |state, cx| state.replace_all(text, window, cx));
+        }
+        if std::mem::take(&mut self.right_dirty) {
+            let text = match self.shown_result() {
+                Some(Ok(text)) => text.clone(),
+                _ => SharedString::default(),
+            };
+            let language = match self.pane {
+                ResultPane::Xml(_) => "xml",
+                ResultPane::Hidden | ResultPane::Filter => "json",
+            };
+            self.right.update(cx, |state, cx| {
+                // Switched before the text arrives, so it is parsed only once.
+                if state.language_name() != language {
+                    state.set_highlighter(language, cx);
+                }
+                state.set_value(text, window, cx);
+            });
+        }
+    }
+
+    /// Computes a replacement for the whole source off the UI thread. It lands
+    /// as one undoable edit unless the source is edited meanwhile; a failure is
+    /// shown in the status strip.
+    fn replace_source(
+        &mut self,
+        job: impl FnOnce() -> Result<String, JsonError> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        let revision = self.revision;
+        self.rewrite_task = cx.spawn(async move |this, cx| {
+            let result = cx.background_executor().spawn(async move { job() }).await;
+            let _ = this.update(cx, |this, cx| {
+                match result {
+                    Ok(text) => this.pending_source = Some((revision, text)),
+                    Err(err) if this.revision == revision => this.doc_error = Some(err),
+                    Err(_) => {}
+                }
+                cx.notify();
+            });
+        });
+    }
+
+    /// Runs a toolbar rewrite on the current source (see `replace_source`).
+    fn rewrite(&mut self, rewrite: Rewrite, cx: &mut Context<Self>) {
+        // Cloning the rope is cheap; the text is built on the background thread.
+        let rope = self.left.read(cx).text().clone();
+        self.replace_source(move || rewrite.apply(&rope.to_string()), cx);
+    }
+
+    /// Puts pasted text in place of the whole source: recognized formats become
+    /// formatted JSON, anything else stays verbatim (see `replace_source`).
+    fn load_pasted(&mut self, text: String, cx: &mut Context<Self>) {
+        self.replace_source(
+            move || {
+                Ok(match text.parse::<Normalized>() {
+                    Ok(Normalized(json)) => json,
+                    Err(_) => text,
+                })
+            },
+            cx,
+        );
     }
 
     /// Converts the filter result (while a filter is active) or the source to
-    /// XML; a failed filter is reported rather than silently replaced by the source.
+    /// XML off the UI thread; a failed filter is reported rather than silently
+    /// replaced by the source, and a result for an edited source is dropped.
     fn convert_to_xml(&mut self, cx: &mut Context<Self>) {
-        let value = match &self.filtered {
-            Some(Ok(shown)) => Value::try_from(Json(&shown.text)),
-            Some(Err(err)) => Err(err.clone()),
-            None => Value::try_from(Json(&self.left.read(cx).value())),
-        };
-        let xml = value.map(|value| Shown {
-            text: AsXml(&value).to_string().into(),
-            count: None,
+        let filtered = self.filtered.clone();
+        let rope = self.left.read(cx).text().clone();
+        let revision = self.revision;
+        self.xml_task = cx.spawn(async move |this, cx| {
+            let xml = cx
+                .background_executor()
+                .spawn(async move {
+                    let value = match filtered {
+                        Some(Ok(text)) => Value::try_from(Json(&text)),
+                        Some(Err(err)) => Err(err),
+                        None => Value::try_from(Json(&rope.to_string())),
+                    };
+                    value.map(|value| AsXml(&value).to_string().into())
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if this.revision == revision {
+                    this.show(ResultPane::Xml(xml), cx);
+                }
+            });
         });
-        self.show(ResultPane::Xml(xml), cx);
     }
 
-    /// Copies the shown result to the clipboard.
-    fn copy_result(&mut self, cx: &mut Context<Self>) {
-        if let Some(Ok(shown)) = self.shown_result() {
-            cx.write_to_clipboard(ClipboardItem::new_string(shown.text.to_string()));
+    /// Esc closes the open search panels first; GPUI Kit's inputs would
+    /// otherwise take Esc to move focus and leave a panel open. The panel sits
+    /// beside the editor's text element, so focus in it does not count as
+    /// inside the editor, hence no per-editor focus test.
+    fn close_search(&mut self, _: &Escape, _: &mut Window, cx: &mut Context<Self>) {
+        let mut closed = false;
+        for editor in [&self.left, &self.right] {
+            if editor.read(cx).search_session().open {
+                editor.update(cx, |state, cx| state.close_search(cx));
+                closed = true;
+            }
+        }
+        if !closed {
+            cx.propagate();
         }
     }
 
-    /// Handles a paste that replaces the whole document (empty or fully selected):
-    /// recognized formats become formatted JSON in one undoable edit.
-    /// Returns `false` to let the editor insert the text normally.
-    fn paste_whole_document(
-        &mut self,
-        text: String,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> bool {
+    /// Copies the result pane while it shows a result, otherwise the source.
+    fn copy(&self, cx: &mut Context<Self>) {
+        let text = match self.shown_result() {
+            Some(Ok(text)) => text.to_string(),
+            _ => self.left.read(cx).text().to_string(),
+        };
+        cx.write_to_clipboard(ClipboardItem::new_string(text));
+    }
+
+    /// Takes over a paste that replaces the whole document (empty or fully
+    /// selected) and hands it to `load_pasted`; returns `false` for other
+    /// pastes, which the editor inserts itself.
+    fn paste_whole_document(&mut self, text: String, cx: &mut Context<Self>) -> bool {
         let state = self.left.read(cx);
         let len = state.text().len();
         if len != 0 && state.selected_range() != (0..len) {
             return false;
         }
-        match text.parse::<Normalized>() {
-            Ok(Normalized(text)) => {
-                self.left
-                    .update(cx, |state, cx| state.replace_all(text, window, cx));
-                true
-            }
-            Err(_) => false,
-        }
+        self.load_pasted(text, cx);
+        true
     }
 
     /// Source editor with the parse-error strip below it.
@@ -378,11 +445,11 @@ impl JsonPluginView {
                         .bordered(false)
                         .appearance(false)
                         .h_full()
-                        .on_paste(move |item, window, cx| {
+                        .on_paste(move |item, _, cx| {
                             let Some(text) = item.text() else {
                                 return false;
                             };
-                            weak.update(cx, |this, cx| this.paste_whole_document(text, window, cx))
+                            weak.update(cx, |this, cx| this.paste_whole_document(text, cx))
                                 .unwrap_or(false)
                         }),
                 ),
@@ -403,49 +470,13 @@ impl JsonPluginView {
             })
     }
 
-    /// Result pane: title row plus either the read-only editor or an error state.
+    /// Result pane: the read-only editor, or an error state.
     fn render_result(&self, cx: &Context<Self>) -> impl IntoElement {
         let Some(result) = self.shown_result() else {
             return div().into_any_element();
         };
         let is_xml = matches!(self.pane, ResultPane::Xml(_));
-        let title = if is_xml {
-            SharedString::from("XML")
-        } else {
-            t!("json.filter_result").into()
-        };
         let theme = cx.theme();
-        let header = h_flex()
-            .h_8()
-            .px_3()
-            .gap_2()
-            .border_b_1()
-            .border_color(theme.border)
-            .child(
-                div()
-                    .text_xs()
-                    .text_color(theme.muted_foreground)
-                    .child(title),
-            )
-            .when_some(result.as_ref().ok(), |this, shown| {
-                this.when_some(shown.count, |this, count| {
-                    this.child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(t!("json.items", count = count).to_string()),
-                    )
-                })
-                .child(div().flex_1())
-                .child(
-                    Button::new("copy")
-                        .ghost()
-                        .xsmall()
-                        .icon(IconName::Copy)
-                        .label(t!("json.copy").to_string())
-                        .on_click(cx.listener(|this, _, _, cx| this.copy_result(cx))),
-                )
-            });
         let body = match result {
             Ok(_) => div()
                 .flex_1()
@@ -495,7 +526,6 @@ impl JsonPluginView {
             .min_w_0()
             .border_l_1()
             .border_color(theme.border)
-            .child(header)
             .child(body)
             .into_any_element()
     }
@@ -517,7 +547,7 @@ impl JsonPluginView {
         };
         let rewrite = |id, icon, key, rewrite: Rewrite| {
             tool(id, icon, key)
-                .on_click(cx.listener(move |this, _, window, cx| this.rewrite(rewrite, window, cx)))
+                .on_click(cx.listener(move |this, _, _, cx| this.rewrite(rewrite, cx)))
         };
         h_flex()
             .px_2()
@@ -568,6 +598,10 @@ impl JsonPluginView {
                     .child(
                         tool("xml", IconName::CodeXml, "json.to_xml")
                             .on_click(cx.listener(|this, _, _, cx| this.convert_to_xml(cx))),
+                    )
+                    .child(
+                        tool("copy", IconName::Copy, "json.copy")
+                            .on_click(cx.listener(|this, _, _, cx| this.copy(cx))),
                     ),
             )
     }
@@ -583,12 +617,16 @@ impl Focusable for JsonPluginView {
 impl Render for JsonPluginView {
     /// Lays out source and result side by side above the filter bar.
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if self.right_dirty {
-            cx.defer_in(window, |this, window, cx| this.push_result(window, cx));
+        let soft_wrap = cx.global::<SettingsStore>().settings.json.soft_wrap;
+        if self.right_dirty || self.pending_source.is_some() || soft_wrap != self.soft_wrap {
+            cx.defer_in(window, move |this, window, cx| {
+                this.sync_editors(soft_wrap, window, cx);
+            });
         }
         let show_result = self.shown_result().is_some();
         v_flex()
             .size_full()
+            .capture_action(cx.listener(Self::close_search))
             .child(
                 h_flex()
                     .items_stretch()

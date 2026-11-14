@@ -91,8 +91,8 @@ settings:
     en: Appearance
     zh-CN: 外观
   appearance_subtitle:
-    en: Fonts and interface scale
-    zh-CN: 字体与界面缩放
+    en: Fonts, interface scale and window corners
+    zh-CN: 字体、界面缩放与窗口圆角
   fonts:
     en: Fonts
     zh-CN: 字体
@@ -120,6 +120,15 @@ settings:
   font_size_detail:
     en: Scales the whole interface (12–20)
     zh-CN: 整个界面按比例缩放（12–20）
+  window:
+    en: Window
+    zh-CN: 窗口
+  window_radius:
+    en: Corner radius
+    zh-CN: 圆角半径
+  window_radius_detail:
+    en: Rounding of the launcher and window corners (0–24)
+    zh-CN: 启动器与窗口四角的圆角（0–24）
   language:
     en: Language
     zh-CN: 语言
@@ -144,6 +153,21 @@ settings:
   language_en:
     en: English
     zh-CN: English
+  json:
+    en: JSON Editor
+    zh-CN: JSON 编辑器
+  json_subtitle:
+    en: Options of the JSON editor plugin
+    zh-CN: JSON 编辑器插件的选项
+  editor:
+    en: Editor
+    zh-CN: 编辑器
+  soft_wrap:
+    en: Soft wrap
+    zh-CN: 自动换行
+  soft_wrap_detail:
+    en: Wrap long lines; very large documents load noticeably slower
+    zh-CN: 长行自动折行；超大文档的加载会明显变慢
 json:
   title:
     en: JSON Editor
@@ -160,12 +184,6 @@ json:
   filter_placeholder:
     en: .list or ;Object.keys(this)
     zh-CN: .list 或 ;Object.keys(this)
-  filter_result:
-    en: Filter result
-    zh-CN: 过滤结果
-  items:
-    en: "· %{count} items"
-    zh-CN: "· %{count} 项"
   copy:
     en: Copy
     zh-CN: 复制

@@ -30,13 +30,6 @@ impl Json<'_> {
         }
         Ok(())
     }
-
-    /// Element count when the text is a JSON array, without building the elements.
-    pub fn array_len(&self) -> Option<usize> {
-        serde_json::from_str::<Vec<de::IgnoredAny>>(self.0)
-            .ok()
-            .map(|items| items.len())
-    }
 }
 
 impl TryFrom<Json<'_>> for Value {
