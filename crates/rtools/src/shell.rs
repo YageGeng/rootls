@@ -1,0 +1,225 @@
+//! App-wide shell state: the plugin registry, the launcher entity and its popup window.
+
+use std::path::PathBuf;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
+
+use gpui_kit::component::TitleBar;
+use gpui_kit::*;
+use rust_i18n::t;
+
+use crate::cli::ShellCommand;
+use crate::launcher::Launcher;
+use crate::plugin::{PluginRegistry, PluginView};
+use crate::settings::SettingsStore;
+use crate::settings::window::SettingsWindow;
+
+/// Wayland application id of every rtools window; matches
+/// `packaging/linux/dev.rtools.rtools.desktop` so the desktop can name and group them.
+pub(crate) const APP_ID: &str = "dev.rtools.rtools";
+
+/// A toggle this soon after the popup closed is the same gesture that closed it:
+/// clicking the tray icon first blurs (and so closes) the popup, then toggles.
+const TOGGLE_AFTER_CLOSE: Duration = Duration::from_millis(300);
+
+/// Default size of the settings window (a platform window boundary).
+const SETTINGS_SIZE: Size<Pixels> = Size {
+    width: px(960.),
+    height: px(620.),
+};
+
+/// Default size of a detached plugin window (a platform window boundary).
+const DETACHED_SIZE: Size<Pixels> = Size {
+    width: px(960.),
+    height: px(680.),
+};
+
+/// Global owner of the launcher popup.
+pub struct Shell {
+    registry: Rc<PluginRegistry>,
+    data_root: PathBuf,
+    /// Survives popup close/reopen so query and plugin state are kept (spec §4.2).
+    launcher: Option<Entity<Launcher>>,
+    popup: Option<AnyWindowHandle>,
+    /// When the popup last closed, see [`TOGGLE_AFTER_CLOSE`].
+    closed_at: Option<Instant>,
+    /// The settings window, while it is open.
+    settings: Option<AnyWindowHandle>,
+}
+
+impl Global for Shell {}
+
+impl Shell {
+    /// Installs the shell; `data_root` holds one directory per plugin.
+    pub fn init(registry: PluginRegistry, data_root: PathBuf, cx: &mut App) {
+        cx.set_global(Shell {
+            registry: Rc::new(registry),
+            data_root,
+            launcher: None,
+            popup: None,
+            closed_at: None,
+            settings: None,
+        });
+    }
+
+    /// Carries out a command from the command line, the tray or the hotkey.
+    pub fn run(command: ShellCommand, cx: &mut App) {
+        match command {
+            ShellCommand::Toggle => Self::toggle(cx),
+            ShellCommand::Settings => Self::open_settings(cx),
+            ShellCommand::Quit => {
+                tracing::info!("rtools quitting");
+                cx.quit();
+            }
+        }
+    }
+
+    /// Hides the popup when it is open, otherwise shows it.
+    pub fn toggle(cx: &mut App) {
+        let shell = cx.global::<Shell>();
+        match shell.popup {
+            Some(popup) => {
+                let _ = popup.update(cx, |_, window, _| window.remove_window());
+                Self::forget_popup(cx);
+            }
+            None if shell
+                .closed_at
+                .is_some_and(|closed| closed.elapsed() < TOGGLE_AFTER_CLOSE) => {}
+            None => Self::open_popup(cx),
+        }
+    }
+
+    /// Records that the popup window is gone (closed by the launcher itself).
+    pub(crate) fn forget_popup(cx: &mut App) {
+        let shell = cx.global_mut::<Shell>();
+        shell.popup = None;
+        shell.closed_at = Some(Instant::now());
+    }
+
+    /// Opens the settings window, or brings it forward when it is already open.
+    pub fn open_settings(cx: &mut App) {
+        if let Some(handle) = cx.global::<Shell>().settings
+            && handle
+                .update(cx, |_, window, _| window.activate_window())
+                .is_ok()
+        {
+            return;
+        }
+        let options = Self::framed_window(SETTINGS_SIZE, cx);
+        let opened = open_window(options, cx, |window, cx| {
+            window.set_window_title(&t!("settings.window_title"));
+            let view = cx.new(|cx| SettingsWindow::new(window, cx));
+            window.focus(&view.focus_handle(cx), cx);
+            view
+        });
+        match opened {
+            Ok((handle, _)) => {
+                tracing::info!("opened the settings window");
+                cx.global_mut::<Shell>().settings = Some(handle);
+            }
+            Err(err) => tracing::error!("opening the settings window failed: {}", err),
+        }
+    }
+
+    /// Opens a plugin view in a normal window with the client-side title bar.
+    pub(crate) fn detach(view: PluginView, title: SharedString, cx: &mut App) {
+        let options = Self::framed_window(DETACHED_SIZE, cx);
+        let opened = open_window(options, cx, |window, cx| {
+            window.set_window_title(&title);
+            window.focus(&view.focus, cx);
+            cx.new(|_| Detached { view })
+        });
+        match opened {
+            Ok(_) => tracing::info!("detached plugin {}", title),
+            Err(err) => tracing::error!("opening the detached window failed: {}", err),
+        }
+    }
+
+    /// A normal centered window of `size` that draws the client-side title bar.
+    fn framed_window(size: Size<Pixels>, cx: &App) -> WindowOptions {
+        WindowOptions {
+            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(None, size, cx))),
+            window_decorations: Some(WindowDecorations::Client),
+            app_id: Some(APP_ID.into()),
+            ..TitleBar::window_options()
+        }
+    }
+
+    /// Opens the borderless, transparent, client-decorated popup (layer-shell on
+    /// Wayland), reusing the launcher entity from earlier openings.
+    fn open_popup(cx: &mut App) {
+        // The settings file and the system appearance may have changed while hidden.
+        SettingsStore::reload(cx);
+        let shell = cx.global::<Shell>();
+        let registry = Rc::clone(&shell.registry);
+        let data_root = shell.data_root.clone();
+        let existing = shell.launcher.clone();
+        let options = WindowOptions {
+            kind: Self::popup_kind(cx),
+            titlebar: None,
+            window_background: WindowBackgroundAppearance::Transparent,
+            window_decorations: Some(WindowDecorations::Client),
+            window_bounds: Some(WindowBounds::Windowed(Bounds::centered(
+                None,
+                Launcher::INITIAL_SIZE,
+                cx,
+            ))),
+            app_id: Some(APP_ID.into()),
+            ..Default::default()
+        };
+        let opened = open_window(options, cx, |window, cx| {
+            let launcher = existing
+                .unwrap_or_else(|| cx.new(|cx| Launcher::new(registry, data_root, window, cx)));
+            launcher.update(cx, |launcher, cx| launcher.attach(window, cx));
+            launcher
+        });
+        match opened {
+            Ok((popup, launcher)) => {
+                let shell = cx.global_mut::<Shell>();
+                shell.popup = Some(popup);
+                shell.launcher = Some(launcher);
+            }
+            Err(err) => tracing::error!("opening the launcher failed: {}", err),
+        }
+    }
+
+    /// Wayland needs layer-shell for a centered, always-on-top surface.
+    #[cfg(target_os = "linux")]
+    fn popup_kind(cx: &App) -> WindowKind {
+        use gpui_kit::layer_shell::{Anchor, KeyboardInteractivity, Layer, LayerShellOptions};
+        if cx.compositor_name() == "Wayland" {
+            WindowKind::LayerShell(LayerShellOptions {
+                namespace: "rtools".into(),
+                layer: Layer::Overlay,
+                anchor: Anchor::empty(),
+                keyboard_interactivity: KeyboardInteractivity::OnDemand,
+                ..Default::default()
+            })
+        } else {
+            WindowKind::PopUp
+        }
+    }
+
+    /// Other platforms position a pop-up window themselves.
+    #[cfg(not(target_os = "linux"))]
+    fn popup_kind(_: &App) -> WindowKind {
+        WindowKind::PopUp
+    }
+}
+
+/// Root of a detached plugin window: title bar above the plugin view.
+struct Detached {
+    view: PluginView,
+}
+
+impl Render for Detached {
+    /// Fills the window below the title bar with the plugin view.
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(TitleBar::new())
+            .child(div().flex_1().min_h_0().child(self.view.view.clone()))
+    }
+}

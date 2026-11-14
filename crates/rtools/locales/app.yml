@@ -1,0 +1,250 @@
+_version: 2
+app:
+  quit_title:
+    en: Quit rtools
+    zh-CN: 退出 rtools
+  quit_detail:
+    en: Stop the background process
+    zh-CN: 关闭后台进程
+  settings_title:
+    en: Settings
+    zh-CN: 设置
+  settings_detail:
+    en: Fonts, font size and language
+    zh-CN: 字体、字号与语言
+launcher:
+  placeholder:
+    en: Search plugins, or paste content
+    zh-CN: 搜索插件，或粘贴内容
+  pasted_placeholder:
+    en: Content pasted, choose how to open it
+    zh-CN: 已粘贴内容，选择处理方式
+  pasted_size:
+    en: Pasted %{size}
+    zh-CN: 已粘贴 %{size}
+  open:
+    en: Open
+    zh-CN: 打开
+  hide:
+    en: Hide
+    zh-CN: 隐藏
+  clear_paste:
+    en: Clear paste
+    zh-CN: 清除粘贴
+  clear_paste_tooltip:
+    en: Clear pasted content (Esc)
+    zh-CN: 清除粘贴内容 (Esc)
+  no_match:
+    en: No matching plugins
+    zh-CN: 没有匹配的插件
+  group_plugins:
+    en: Plugins
+    zh-CN: 插件
+  group_content:
+    en: Can open this content
+    zh-CN: 可处理此内容
+  group_system:
+    en: System
+    zh-CN: 系统
+  open_with:
+    en: Open with %{name}
+    zh-CN: 用 %{name} 打开
+  back:
+    en: Back to plugins (Esc)
+    zh-CN: 返回插件列表 (Esc)
+  detach:
+    en: Open in a separate window (%{key})
+    zh-CN: 在独立窗口中打开 (%{key})
+tray:
+  hint:
+    en: Double-tap Ctrl to open
+    zh-CN: 双击 Ctrl 呼出
+  open:
+    en: Open launcher
+    zh-CN: 打开启动器
+  settings:
+    en: Settings…
+    zh-CN: 设置…
+  quit:
+    en: Quit rtools
+    zh-CN: 退出 rtools
+settings:
+  window_title:
+    en: rtools Settings
+    zh-CN: rtools 设置
+  search:
+    en: Search settings…
+    zh-CN: 搜索设置…
+  close:
+    en: Close
+    zh-CN: 关闭
+  edit_file:
+    en: Edit in settings file
+    zh-CN: 在设置文件中编辑
+  search_results:
+    en: Search results
+    zh-CN: 搜索结果
+  no_match:
+    en: No matching settings
+    zh-CN: 没有匹配的设置
+  appearance:
+    en: Appearance
+    zh-CN: 外观
+  appearance_subtitle:
+    en: Fonts and interface scale
+    zh-CN: 字体与界面缩放
+  fonts:
+    en: Fonts
+    zh-CN: 字体
+  ui_font:
+    en: UI font
+    zh-CN: 界面字体
+  ui_font_detail:
+    en: Text of the launcher, settings and plugins
+    zh-CN: 启动器、设置与插件界面的文字
+  mono_font:
+    en: Editor font
+    zh-CN: 编辑器字体
+  mono_font_detail:
+    en: Monospace text of the JSON editor and filter
+    zh-CN: JSON 编辑器与过滤框的等宽文字
+  theme_font:
+    en: Theme default
+    zh-CN: 跟随主题
+  scale:
+    en: Scale
+    zh-CN: 缩放
+  font_size:
+    en: Font size
+    zh-CN: 字号
+  font_size_detail:
+    en: Scales the whole interface (12–20)
+    zh-CN: 整个界面按比例缩放（12–20）
+  language:
+    en: Language
+    zh-CN: 语言
+  language_subtitle:
+    en: Language of the interface
+    zh-CN: 界面显示的语言
+  display:
+    en: Display
+    zh-CN: 显示
+  interface_language:
+    en: Interface language
+    zh-CN: 界面语言
+  interface_language_detail:
+    en: Takes effect immediately; System follows the operating system
+    zh-CN: 立即生效；「跟随系统」读取操作系统语言
+  language_system:
+    en: System
+    zh-CN: 跟随系统
+  language_zh_cn:
+    en: 简体中文
+    zh-CN: 简体中文
+  language_en:
+    en: English
+    zh-CN: English
+json:
+  title:
+    en: JSON Editor
+    zh-CN: JSON 编辑器
+  description:
+    en: Format, filter and convert JSON
+    zh-CN: 格式化、过滤、转换 JSON
+  recognized:
+    en: Recognized as %{kind}
+    zh-CN: 识别为 %{kind}
+  url_params:
+    en: URL parameters
+    zh-CN: URL 参数
+  filter_placeholder:
+    en: .list or ;Object.keys(this)
+    zh-CN: .list 或 ;Object.keys(this)
+  filter_result:
+    en: Filter result
+    zh-CN: 过滤结果
+  items:
+    en: "· %{count} items"
+    zh-CN: "· %{count} 项"
+  copy:
+    en: Copy
+    zh-CN: 复制
+  format:
+    en: Format
+    zh-CN: 格式化
+  minify:
+    en: Minify
+    zh-CN: 压缩
+  escape:
+    en: Escape
+    zh-CN: 转义
+  unescape:
+    en: Remove escaping
+    zh-CN: 去除转义
+  to_xml:
+    en: Convert to XML
+    zh-CN: 转为 XML
+  xml_failed:
+    en: Cannot convert to XML
+    zh-CN: 无法转换为 XML
+  timeout_detail:
+    en: The expression ran longer than %{secs} s and was stopped
+    zh-CN: 表达式运行超过 %{secs} 秒，已中断
+  engine_unavailable:
+    en: Filter engine unavailable
+    zh-CN: 过滤引擎不可用
+  expression_error:
+    en: Expression error
+    zh-CN: 表达式错误
+  error:
+    position:
+      en: "Line %{line}, column %{column}: %{message}"
+      zh-CN: 第 %{line} 行第 %{column} 列：%{message}
+    parse:
+      en: "Invalid JSON (line %{line}, column %{column}): %{message}"
+      zh-CN: JSON 解析失败（第 %{line} 行第 %{column} 列）：%{message}
+    xml:
+      en: "Invalid XML: %{message}"
+      zh-CN: XML 解析失败：%{message}
+    yaml:
+      en: "Invalid YAML: %{message}"
+      zh-CN: YAML 解析失败：%{message}
+    unrecognized:
+      en: Unrecognized input format
+      zh-CN: 无法识别的输入格式
+    script:
+      en: "Expression error: %{message}"
+      zh-CN: 表达式错误：%{message}
+    timeout:
+      en: Timed out
+      zh-CN: 执行超时
+    engine_stopped:
+      en: The filter engine has stopped
+      zh-CN: 过滤引擎已停止
+    duplicate_key:
+      en: Duplicate key "%{key}"
+      zh-CN: 重复的键 "%{key}"
+    yaml_top_level:
+      en: The top level must be a mapping or a sequence
+      zh-CN: 顶层必须是对象或数组
+    xml_extra_end:
+      en: Unexpected end tag
+      zh-CN: 多余的结束标签
+    xml_unknown_entity:
+      en: "Unknown entity &%{name};"
+      zh-CN: 未知实体 &%{name};
+    xml_too_deep:
+      en: Nesting is too deep
+      zh-CN: 嵌套层级过深
+    xml_multiple_roots:
+      en: More than one root element
+      zh-CN: 存在多个根元素
+    xml_text_outside_root:
+      en: Text outside the root element
+      zh-CN: 根元素之外存在文本
+    xml_unclosed:
+      en: An element is not closed
+      zh-CN: 存在未闭合的元素
+    xml_no_root:
+      en: No root element
+      zh-CN: 没有根元素

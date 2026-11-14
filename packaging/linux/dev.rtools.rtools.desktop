@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=rtools
+Comment=Productivity launcher
+Comment[zh_CN]=效率工具启动器
+Exec=rtools
+Terminal=false
+Categories=Utility;
+StartupNotify=false
+Icon=dev.rtools.rtools
