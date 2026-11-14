@@ -1,1 +1,138 @@
-# rootls
+# rtools
+
+一个用 Rust 编写、常驻后台的桌面效率启动器，灵感来自 uTools。界面基于 [GPUI](https://www.gpui.rs) 与 [gpui-kit](https://gpui-kit.com) 绘制，双击 `Ctrl` 随时呼出；第一个内置插件是 **JSON 编辑器**。
+
+> 目前主要在 Linux（KDE Plasma · Wayland）上开发和验证。X11、macOS、Windows 的代码路径已经实现，但尚未实测。
+
+## 功能
+
+### 启动器
+
+- **双击 `Ctrl` 呼出 / 隐藏**：只认「单独轻按两次」（每次按住不超过 300 ms，两次间隔不超过 350 ms），`Ctrl+C` 之类的组合键不会误触。刻意不提供 `Alt+Space` 等组合键（KDE 上它属于 KRunner）。
+- **托盘图标**：左键切换启动器；右键菜单为「打开启动器 / 设置… / 退出 rtools」。
+- **单实例**：再次运行 `rtools` 不会启动第二个进程，而是把命令转给正在运行的实例。
+- **搜索插件**：按名称或关键词匹配；列表下方是「设置」「退出 rtools」两个系统项。
+- **粘贴识别**：在搜索框里粘贴多行或超过 4 KB 的内容时，内容会收成一个「已粘贴」标签，并列出能处理它的插件，回车即可带着内容打开。
+- **Wayland 下的窗口**：启动器是一层全屏透明覆盖层，面板每次呼出都在屏幕正中；拖动插件标题栏或列表底栏可以移动，拖动插件面板的四边与四角可以调整大小；点击面板外即隐藏。
+- **分离窗口**：在插件里按 `Ctrl+D`（macOS 为 `Cmd+D`），可以把它移到独立窗口继续使用。
+
+### JSON 编辑器
+
+- **语法高亮与折叠**：由 tree-sitter 驱动，对象和数组都能折叠；可在设置里开启自动换行。
+- **搜索 / 替换**：`Ctrl+F` 搜索，`Ctrl+H` 替换（macOS 为 `Cmd+F` / `Cmd+Shift+F`），`Esc` 关闭；右侧结果区只读，只能搜索。
+- **整文档粘贴自动识别**：编辑器为空或已全选时粘贴，JSON、XML、URL 参数（`a=1&b=2` 或完整 URL）、多行 YAML 都会转成格式化后的 JSON；无法识别时原样粘贴。
+- **工具栏**：格式化（4 空格缩进）、压缩、转义、去除转义、转为 XML、复制。改写左侧原文的操作都可以 `Ctrl+Z` 撤销。
+- **不丢数据**：保留键的顺序和数字的原始写法（如 `1.50`、超过 64 位的整数）；遇到重复的键会直接报错并给出行列号，而不是悄悄只保留其中一个值。
+- **JS 过滤**：底部输入框里的表达式会接在 `this` 后面，在 QuickJS 中执行，结果显示在右侧：
+
+  | 输入 | 含义 |
+  |---|---|
+  | `.data.items` | 取 `this.data.items` |
+  | `[0].id` | 取第一项的 `id` |
+  | `.items.map(x => x.name)` | 取出每一项的 `name` |
+  | `.items.filter(x => x.age > 30).length` | 统计满足条件的项数 |
+  | `;Object.keys(this)` | 列出顶层的所有键 |
+
+  每次求值都会从原文重新解析，表达式中的修改（如 `.reverse()`）不会影响下一次；单次执行超过 2 秒会自动中断。
+- **转为 XML**：有过滤表达式时转换过滤结果，否则转换原文；XML 结果同样带语法高亮。
+- **草稿自动保存**：编辑停顿 1 秒后保存，下次打开时自动恢复。
+- **后台处理**：识别转换、格式化、校验和转 XML 都在后台线程完成，大文档也不会卡住界面（开启自动换行后，超大文档的载入会明显变慢）。
+
+### 设置
+
+从托盘菜单、启动器里的「设置」项或 `rtools settings` 打开设置窗口，修改立即生效：
+
+- **外观**：界面字体、编辑器字体、字号（12–20）、窗口圆角（0–24）
+- **语言**：跟随系统 / 简体中文 / English
+- **JSON 编辑器**：自动换行
+
+## 安装（Linux）
+
+依赖：
+
+- Rust stable（仓库中的 `rust-toolchain.toml` 会自动选用）
+- C 编译器（QuickJS 与 tree-sitter 需要编译 C 代码）
+- GPUI 在 Linux 上的常规依赖：Wayland / X11 开发库、xkbcommon、可用的 Vulkan 驱动
+
+```bash
+git clone https://github.com/YageGeng/rootls.git
+cd rootls
+./packaging/linux/install.sh
+```
+
+脚本会构建 release 版本，并安装到当前用户目录：
+
+| 内容 | 位置 |
+|---|---|
+| 可执行文件（已去除调试符号） | `~/.local/bin/rtools` |
+| 桌面入口 | `~/.local/share/applications/dev.rtools.rtools.desktop` |
+| 应用图标 | `~/.local/share/icons/hicolor/{scalable,32x32,256x256}/apps/` |
+
+双击 `Ctrl` 需要读取 `/dev/input` 下的键盘事件。请把自己加入 `input` 组，然后**注销并重新登录**：
+
+```bash
+sudo usermod -aG input $USER
+```
+
+没有这项权限时其他功能照常可用，只是需要用托盘图标或下面的命令呼出启动器，也可以把 `rtools toggle` 绑定到系统快捷键。
+
+## 使用
+
+### 命令行
+
+| 命令 | 作用 |
+|---|---|
+| `rtools` 或 `rtools toggle` | 显示或隐藏启动器；未运行时先启动再显示 |
+| `rtools settings` | 打开设置窗口 |
+| `rtools quit` | 退出后台进程 |
+
+### 快捷键
+
+| 位置 | 按键 | 作用 |
+|---|---|---|
+| 任意位置 | 双击 `Ctrl` | 显示 / 隐藏启动器 |
+| 启动器列表 | `↑` `↓` / `Enter` | 选择 / 打开 |
+| 启动器列表 | `Esc` | 有已粘贴的内容时清除，否则隐藏 |
+| 插件 | `Ctrl+D` | 分离到独立窗口 |
+| JSON 编辑器 | `Ctrl+F` / `Ctrl+H` | 搜索 / 替换 |
+| 设置窗口 | `Esc` | 关闭 |
+
+## 配置与数据
+
+设置保存在 `~/.config/rtools/settings.toml`，可以在设置窗口里点「在设置文件中编辑」直接修改；手动修改会在下次呼出启动器时生效。
+
+```toml
+ui_font = "Inter"              # 省略则跟随主题
+mono_font = "JetBrains Mono"   # 省略则跟随主题
+font_size = 16.0               # 12–20
+window_radius = 4.0            # 0–24
+language = "system"            # system / zh-CN / en
+
+[json]
+soft_wrap = false
+```
+
+| 数据 | 位置 |
+|---|---|
+| JSON 编辑器草稿 | `~/.local/share/rtools/json/draft.json` |
+| 单实例套接字 | `$XDG_RUNTIME_DIR/rtools.sock` |
+
+## 开发
+
+```bash
+cargo run --release                          # 运行
+cargo test                                   # 测试
+cargo clippy --all-targets -- -D warnings    # 静态检查
+cargo fmt --all                              # 格式化
+```
+
+- **代码结构**（`crates/rtools/src`）：`shell` 管理窗口与命令，`launcher` 是启动器，`settings` 是设置与设置窗口，`hotkey` 负责双击 `Ctrl`，`tray` 是托盘，`instance` 负责单实例，`plugin` 定义插件契约；插件位于 `plugins/`，JSON 编辑器分为不依赖界面的 `core` 和界面层 `ui`。
+- **设计文档**：`docs/superpowers/specs/2026-11-13-rtools-design.md`
+- **约定**：代码规范见 `AGENTS.md`，提交信息格式见 `.gitmessage`；仓库配置了 pre-commit（fmt + clippy）。
+
+## 已知限制
+
+- 过滤结果中超过 2^53 的整数会丢失精度（JavaScript 数字的限制）；格式化、压缩等不经过 JavaScript 的操作不受影响。
+- 多显示器时，Wayland 下的启动器总是出现在第一块屏幕上。
+- 调整后的面板大小只在本次运行期间保留。
+- macOS、Windows 尚未实测。
