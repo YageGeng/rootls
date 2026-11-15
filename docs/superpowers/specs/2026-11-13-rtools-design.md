@@ -2,7 +2,7 @@
 
 - 日期：2026-11-13
 - 状态：待审阅
-- 范围：子项目 1（启动器外壳）+ 子项目 2（JSON 插件）
+- 范围：子项目 1（启动器外壳）+ 子项目 2（JSON 插件）；第二个插件「文本对比」见 `2026-11-14-rtools-diff-plugin-design.md`
 
 ## 1. 背景与目标
 
@@ -43,10 +43,13 @@ rtools 用 Rust + GPUI（gpui-kit）实现同类启动器，第一个插件复�
 ```
 Cargo.toml                 # [workspace] members = ["crates/rtools"]; [workspace.dependencies] 统一声明
 crates/rtools/
-  src/plugin.rs            # 插件契约（Plugin trait、PluginManifest、Launch、PluginRegistry）——预留给后续插件
+  src/plugin/              # 插件契约（Plugin trait、PluginManifest、Launch、PluginRegistry），共享的草稿 Draft 与 Autosave（draft.rs），Esc 关闭搜索框（search.rs）
+  src/ui/                  # 启动器与插件共用的界面件：底栏 `Toolbar`（含其按钮与分隔线）、状态页 `StatusPage`、无需 Root 的 tooltip（`ButtonExt`）；按键提示直接取自快捷键绑定（`Kbd::binding_for_action`）
   src/plugins/json/core/   # JSON 纯逻辑，不得引用 gpui
   src/plugins/json/ui/     # JSON 插件界面
-  src/{cli,instance,paste,shell,launcher,settings,i18n,theme,assets}.rs, src/{hotkey,tray}/
+  src/plugins/diff/core/   # 文本对比纯逻辑（行级 diff → 统一补丁），不得引用 gpui
+  src/plugins/diff/ui/     # 文本对比插件界面（编辑视图 + 对比视图）
+  src/{cli,instance,shell,theme,assets}.rs, src/{hotkey,tray,launcher,settings}/（launcher/panel.rs：覆盖层面板的位置与大小）
   locales/app.yml          # rust-i18n 翻译
   tests/                   # 全部集成测试
 assets/icons/              # 应用与托盘图标
@@ -63,7 +66,7 @@ packaging/linux/           # .desktop、用户级安装脚本 install.sh
 |---|---|
 | ui | `gpui-kit`（feature `tree-sitter`：JSON 高亮与折叠）、`tree-sitter-xml`（XML 结果高亮，GPUI Kit 未内置 XML 语法） |
 | script | `rquickjs` |
-| data formats | `form_urlencoded`、`image`（托盘图标 PNG 解码）、`quick-xml`、`serde`、`serde-saphyr`（YAML 反序列化为 `serde_json::Value`）、`serde_json`（feature `preserve_order`、`arbitrary_precision`）、`toml`（设置文件） |
+| data formats | `form_urlencoded`、`image`（托盘图标 PNG 解码）、`quick-xml`、`serde`、`serde-saphyr`（YAML 反序列化为 `serde_json::Value`）、`serde_json`（feature `preserve_order`、`arbitrary_precision`）、`similar`（文本对比的行级 diff）、`toml`（设置文件） |
 | platform | `dirs`、`evdev`（仅 Linux）、`interprocess`、`ksni`（仅 Linux）、`rdev`（仅 macOS/Windows）、`sys-locale`、`tray-icon`（仅 macOS/Windows） |
 | infra | `futures`、`rust-i18n`、`thiserror`、`tracing`、`tracing-subscriber` |
 
@@ -93,6 +96,8 @@ pub trait Plugin: 'static {
     fn accepts(&self, _input: &str) -> Option<SharedString> { None }
     /// Builds the plugin root view.
     fn open(&self, launch: Launch, window: &mut Window, cx: &mut App) -> AnyView;
+    /// Registers the plugin's key bindings once at startup (default: none).
+    fn bind_keys(&self, _cx: &mut App) {}
 }
 
 pub struct PluginRegistry { plugins: Vec<Box<dyn Plugin>> }
@@ -254,6 +259,7 @@ pub struct PluginRegistry { plugins: Vec<Box<dyn Plugin>> }
 ### 5.6 草稿
 
 - 左侧内容变化 1 秒后写入 `<data_dir>/draft.json`：先写临时文件，再 rename 覆盖。
+- 草稿由插件契约里的 `crate::plugin::Draft` 实现（`Draft::new(data_dir, file_name)`），文本对比插件用同一实现保存 `original.txt` 与 `modified.txt`。
 - 打开插件时优先使用 `Launch.input`，否则读取草稿。
 
 ### 5.7 视觉规范（2026-11-13 经原型确认）

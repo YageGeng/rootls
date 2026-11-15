@@ -96,3 +96,19 @@ fn a_stale_socket_is_replaced() {
         ShellCommand::Toggle
     );
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn an_oversized_command_line_is_rejected() {
+    use std::io::Write as _;
+    let name = unique("oversized");
+    let server = name.bind().unwrap();
+    let reader = thread::spawn(move || server.incoming().next());
+    // A valid command behind far more padding than any command needs.
+    let mut client = std::os::unix::net::UnixStream::connect(&name.0).unwrap();
+    let line = format!("{}toggle\n", " ".repeat(100_000));
+    // The server stops reading early, so the rest of the write may fail.
+    let _ = client.write_all(line.as_bytes());
+    drop(client);
+    assert!(reader.join().unwrap().unwrap().is_err());
+}

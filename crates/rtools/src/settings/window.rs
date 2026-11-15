@@ -5,7 +5,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::input::{Input, InputEvent, InputState, NumberInput};
 use gpui_kit::component::kbd::Kbd;
-use gpui_kit::component::searchable_list::{SearchableListItem, SearchableVec};
+use gpui_kit::component::searchable_list::SearchableVec;
 use gpui_kit::component::select::{Select, SelectEvent, SelectState};
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{
@@ -18,6 +18,7 @@ use rust_i18n::t;
 use std::ops::RangeInclusive;
 
 use super::{FONT_SIZES, Language, Settings, SettingsStore, WINDOW_RADII};
+use crate::ui::Choice;
 
 actions!(settings_window, [CloseSettings]);
 
@@ -27,27 +28,6 @@ const CONTEXT: &str = "SettingsWindow";
 /// Installs the settings window key bindings.
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", CloseSettings, Some(CONTEXT))]);
-}
-
-/// One option of a settings dropdown: its label and the value it stands for.
-#[derive(Clone)]
-struct Choice<V> {
-    label: SharedString,
-    value: V,
-}
-
-impl<V: Clone + PartialEq + 'static> SearchableListItem for Choice<V> {
-    type Value = V;
-
-    /// The label shown in the menu and the trigger.
-    fn title(&self) -> SharedString {
-        self.label.clone()
-    }
-
-    /// The setting value this option selects.
-    fn value(&self) -> &V {
-        &self.value
-    }
 }
 
 /// Font dropdown options; `None` follows the theme.
@@ -181,10 +161,10 @@ impl SettingsWindow {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let store = cx.global::<SettingsStore>();
         let (font_size, window_radius) = (store.settings.font_size, store.settings.window_radius);
-        let path_label = match dirs::home_dir().and_then(|home| store.path.strip_prefix(home).ok())
-        {
+        let path = store.file.path();
+        let path_label = match dirs::home_dir().and_then(|home| path.strip_prefix(home).ok()) {
             Some(relative) => format!("~/{}", relative.display()),
-            None => store.path.display().to_string(),
+            None => path.display().to_string(),
         }
         .into();
         let mut font_names = cx.text_system().all_font_names();
@@ -348,10 +328,10 @@ impl SettingsWindow {
 
     /// Opens the settings file in the system editor, writing it first if missing.
     fn edit_file(&mut self, cx: &mut Context<Self>) {
-        let store = cx.global::<SettingsStore>();
-        let path = store.path.clone();
+        let store = cx.global_mut::<SettingsStore>();
+        let path = store.file.path().to_path_buf();
         if !path.exists()
-            && let Err(err) = store.settings.save(&path)
+            && let Err(err) = store.file.save(&store.settings)
         {
             tracing::warn!("creating settings file {} failed: {}", path.display(), err);
             return;
@@ -412,7 +392,12 @@ impl SettingsWindow {
     }
 
     /// Sidebar: search box, page navigation and the Esc hint.
-    fn render_sidebar(&self, searching: bool, cx: &Context<Self>) -> impl IntoElement {
+    fn render_sidebar(
+        &self,
+        searching: bool,
+        window: &Window,
+        cx: &Context<Self>,
+    ) -> impl IntoElement {
         let theme = cx.theme();
         let muted = theme.muted_foreground;
         let nav = Page::ALL.map(|page| {
@@ -454,8 +439,10 @@ impl SettingsWindow {
                 h_flex()
                     .px_1()
                     .gap_2()
-                    .child(Kbd::new(
-                        Keystroke::parse("escape").expect("valid keystroke"),
+                    .children(Kbd::binding_for_action(
+                        &CloseSettings,
+                        Some(CONTEXT),
+                        window,
                     ))
                     .child(
                         div()
@@ -562,7 +549,7 @@ impl SettingsWindow {
                         Button::new("edit-file")
                             .outline()
                             .small()
-                            .label(t!("settings.edit_file").to_string())
+                            .label(t!("settings.edit_file"))
                             .on_click(cx.listener(|this, _, _, cx| this.edit_file(cx))),
                     ),
             )
@@ -593,7 +580,7 @@ impl Focusable for SettingsWindow {
 
 impl Render for SettingsWindow {
     /// Client-side title bar above the sidebar and the content.
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let query = self.search.read(cx).value().trim().to_lowercase();
         v_flex()
             .size_full()
@@ -606,7 +593,7 @@ impl Render for SettingsWindow {
                     .flex_1()
                     .min_h_0()
                     .items_stretch()
-                    .child(self.render_sidebar(!query.is_empty(), cx))
+                    .child(self.render_sidebar(!query.is_empty(), window, cx))
                     .child(self.render_content(&query, cx)),
             )
     }

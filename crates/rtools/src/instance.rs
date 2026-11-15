@@ -1,6 +1,6 @@
 //! Single-instance coordination over a local socket (spec §4.1).
 
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read as _, Write};
 use std::time::Duration;
 
 use interprocess::local_socket::prelude::*;
@@ -12,6 +12,8 @@ use crate::cli::ShellCommand;
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
 /// Consecutive `accept` failures after which the listener gives up.
 const MAX_ACCEPT_FAILURES: u32 = 8;
+/// Longest command line read from a client; every command is far shorter.
+const MAX_LINE: u64 = 64;
 
 /// The socket shared by every `rtools` process of one user: a socket file path
 /// on Linux (abstract names are reachable by every local user), a namespaced
@@ -126,7 +128,7 @@ impl InstanceServer {
                         failures = 0;
                         // A connection closed without a line is another process's
                         // liveness probe (see `bind`), not a command.
-                        if let Some(command) = read_command(stream).transpose() {
+                        if let Some(command) = ShellCommand::read_from(stream).transpose() {
                             return Some(command);
                         }
                     }
@@ -147,15 +149,18 @@ impl InstanceServer {
     }
 }
 
-/// Reads one command line from a client connection within [`READ_TIMEOUT`];
-/// `None` when the client closed without sending anything.
-fn read_command(stream: Stream) -> io::Result<Option<ShellCommand>> {
-    stream.set_recv_timeout(Some(READ_TIMEOUT))?;
-    let mut line = String::new();
-    if BufReader::new(stream).read_line(&mut line)? == 0 {
-        return Ok(None);
+impl ShellCommand {
+    /// Reads one command line of at most [`MAX_LINE`] bytes from a client
+    /// connection within [`READ_TIMEOUT`]; `None` when the client closed
+    /// without sending anything. A longer line is cut off and fails to parse.
+    fn read_from(stream: Stream) -> io::Result<Option<Self>> {
+        stream.set_recv_timeout(Some(READ_TIMEOUT))?;
+        let mut line = String::new();
+        if BufReader::new(stream.take(MAX_LINE)).read_line(&mut line)? == 0 {
+            return Ok(None);
+        }
+        line.parse()
+            .map(Some)
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
     }
-    line.parse()
-        .map(Some)
-        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }

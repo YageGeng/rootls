@@ -4,13 +4,20 @@
 //! pasted or typed content through [`Plugin::accepts`], and builds its root view
 //! in [`Plugin::open`]. The shell finds plugins through a [`PluginRegistry`].
 //! Plugins read their user preferences (their table in `settings.toml`) from the
-//! [`crate::settings::SettingsStore`] global while rendering.
+//! [`crate::settings::SettingsStore`] global while rendering, and may keep
+//! their text across runs with a [`Draft`].
+
+mod draft;
+mod search;
 
 use std::path::PathBuf;
 
 use gpui_kit::assets::IconName;
 use gpui_kit::{AnyView, App, Entity, FocusHandle, Focusable, Render, SharedString, Window};
 use rust_i18n::t;
+
+pub use draft::{Autosave, Draft};
+pub use search::SearchPanels;
 
 /// Static metadata the shell uses to list and match a plugin.
 pub struct PluginManifest {
@@ -78,6 +85,10 @@ pub trait Plugin: 'static {
 
     /// Builds the plugin root view.
     fn open(&self, launch: Launch, window: &mut Window, cx: &mut App) -> PluginView;
+
+    /// Registers the plugin's key bindings, once at startup; most plugins
+    /// have none of their own.
+    fn bind_keys(&self, _cx: &mut App) {}
 }
 
 /// Why a plugin appears in search results.
@@ -113,6 +124,13 @@ impl FromIterator<Box<dyn Plugin>> for PluginRegistry {
 }
 
 impl PluginRegistry {
+    /// Registers every plugin's key bindings.
+    pub fn bind_keys(&self, cx: &mut App) {
+        for plugin in &self.plugins {
+            plugin.bind_keys(cx);
+        }
+    }
+
     /// The plugin at `index`; indexes come from [`Self::search`], so a bad one is a bug.
     pub fn plugin(&self, index: usize) -> &dyn Plugin {
         self.plugins[index].as_ref()

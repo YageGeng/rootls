@@ -1,6 +1,6 @@
 # rtools
 
-一个用 Rust 编写、常驻后台的桌面效率启动器，灵感来自 uTools。界面基于 [GPUI](https://www.gpui.rs) 与 [gpui-kit](https://gpui-kit.com) 绘制，双击 `Ctrl` 随时呼出；第一个内置插件是 **JSON 编辑器**。
+一个用 Rust 编写、常驻后台的桌面效率启动器，灵感来自 uTools。界面基于 [GPUI](https://www.gpui.rs) 与 [gpui-kit](https://gpui-kit.com) 绘制，双击 `Ctrl` 随时呼出；内置插件有 **JSON 编辑器** 和 **文本对比**。
 
 > 目前主要在 Linux（KDE Plasma · Wayland）上开发和验证。X11、macOS、Windows 的代码路径已经实现，但尚未实测。
 
@@ -37,6 +37,25 @@
 - **转为 XML**：有过滤表达式时转换过滤结果，否则转换原文；XML 结果同样带语法高亮。
 - **草稿自动保存**：编辑停顿 1 秒后保存，下次打开时自动恢复。
 - **后台处理**：识别转换、格式化、校验和转 XML 都在后台线程完成，大文档也不会卡住界面（开启自动换行后，超大文档的载入会明显变慢）。
+
+### 文本对比
+
+输入 `diff`、`compare` 或「对比」打开。
+
+- **编辑视图**：左右两个编辑器分别是「原文」和「修改后」，带行号，可用 `Ctrl+F` / `Ctrl+H` 搜索替换。代码按语言着色：默认自动识别，也可在底栏的语言下拉框里指定（Bash、C、C++、C#、CSS、Go、HTML、Java、JavaScript、JSON、Markdown、Python、Rust、SQL、TOML、TSX、TypeScript、XML、YAML）。底栏可以交换两侧、清空两侧（都能 `Ctrl+Z` 撤销）。两侧内容停止输入 1 秒后自动保存，下次打开时恢复。
+- **对比视图**：按 `Ctrl+Enter`（macOS 为 `Cmd+Enter`）或点「对比」进入，只读：
+  - 可切换并排 / 统一两种布局；
+  - 删除行红底、新增行绿底，变化的词（或字符）加深；
+  - 默认显示全部行；底栏按钮可切换为只保留每处变化前后 3 行、其余折叠（可逐段展开），选择会记住；
+  - 按同一语言语法着色；
+  - 底栏显示 `+N −M` 统计，`Alt+↑` / `Alt+↓` 跳到上一处 / 下一处变化，`Esc` 回到编辑。
+- **对比开关**：在对比视图底栏随时切换，结果立即刷新，选择会记住：
+  - 忽略空白（同 `git diff -w`）；
+  - 忽略大小写；
+  - 先格式化 JSON（按键名排序、4 空格缩进后再比，去掉格式和键顺序带来的差异）；
+  - 字符级高亮（默认按词）。
+- **不算差异**：`\r\n` 与 `\n`、末尾有没有换行。
+- **后台计算**：大文本也不会卡住界面；超过 2 秒的计算会给出正确但可能不是最短的结果。
 
 ### 设置
 
@@ -95,6 +114,9 @@ sudo usermod -aG input $USER
 | 启动器列表 | `Esc` | 有已粘贴的内容时清除，否则隐藏 |
 | 插件 | `Ctrl+D` | 分离到独立窗口 |
 | JSON 编辑器 | `Ctrl+F` / `Ctrl+H` | 搜索 / 替换 |
+| 文本对比（编辑） | `Ctrl+Enter` | 进入对比视图 |
+| 文本对比（对比） | `Alt+↑` / `Alt+↓` | 上一处 / 下一处变化 |
+| 文本对比（对比） | `Esc` | 回到编辑视图 |
 | 设置窗口 | `Esc` | 关闭 |
 
 ## 配置与数据
@@ -110,11 +132,20 @@ language = "system"            # system / zh-CN / en
 
 [json]
 soft_wrap = false
+
+[diff]                         # 由文本对比的对比视图修改
+layout = "split"               # split（并排）/ unified（统一）
+ignore_whitespace = false
+ignore_case = false
+format_json = false
+char_level = false             # false 为词级高亮
+fold_unchanged = false         # true 时折叠未改动的行
 ```
 
 | 数据 | 位置 |
 |---|---|
 | JSON 编辑器草稿 | `~/.local/share/rtools/json/draft.json` |
+| 文本对比草稿 | `~/.local/share/rtools/diff/original.txt`、`modified.txt` |
 | 单实例套接字 | `$XDG_RUNTIME_DIR/rtools.sock` |
 
 ## 开发
@@ -126,8 +157,8 @@ cargo clippy --all-targets -- -D warnings    # 静态检查
 cargo fmt --all                              # 格式化
 ```
 
-- **代码结构**（`crates/rtools/src`）：`shell` 管理窗口与命令，`launcher` 是启动器，`settings` 是设置与设置窗口，`hotkey` 负责双击 `Ctrl`，`tray` 是托盘，`instance` 负责单实例，`plugin` 定义插件契约；插件位于 `plugins/`，JSON 编辑器分为不依赖界面的 `core` 和界面层 `ui`。
-- **设计文档**：`docs/superpowers/specs/2026-11-13-rtools-design.md`
+- **代码结构**（`crates/rtools/src`）：`shell` 管理窗口与命令，`launcher` 是启动器，`settings` 是设置与设置窗口，`hotkey` 负责双击 `Ctrl`，`tray` 是托盘，`instance` 负责单实例，`plugin` 定义插件契约（含共享的草稿自动保存），`ui` 是启动器与插件共用的界面件；插件位于 `plugins/`（`json`、`diff`），每个都分为不依赖界面的 `core` 和界面层 `ui`；插件之间互不引用。
+- **设计文档**：`docs/superpowers/specs/2026-11-13-rtools-design.md`，文本对比见 `2026-11-14-rtools-diff-plugin-design.md`
 - **约定**：代码规范见 `AGENTS.md`，提交信息格式见 `.gitmessage`；仓库配置了 pre-commit（fmt + clippy）。
 
 ## 已知限制
@@ -135,4 +166,6 @@ cargo fmt --all                              # 格式化
 - 过滤结果中超过 2^53 的整数会丢失精度（JavaScript 数字的限制）；格式化、压缩等不经过 JavaScript 的操作不受影响。
 - 多显示器时，Wayland 下的启动器总是出现在第一块屏幕上。
 - 调整后的面板大小只在本次运行期间保留。
+- 文本对比「先格式化 JSON」时，数字的指数写法会统一（`1e2` 写成 `1e+2`），只差指数写法的数字不算差异。
+- 手改 `settings.toml` 写错时按默认值运行；之后在界面里改设置，原文件会先另存为 `settings.toml.broken` 再写入。
 - macOS、Windows 尚未实测。

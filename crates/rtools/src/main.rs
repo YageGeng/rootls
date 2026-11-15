@@ -9,10 +9,11 @@ use rtools::assets::AppAssets;
 use rtools::cli::ShellCommand;
 use rtools::instance::InstanceName;
 use rtools::plugin::{Plugin, PluginRegistry};
+use rtools::plugins::diff::ui::DiffPlugin;
 use rtools::plugins::json::ui::JsonPlugin;
 use rtools::settings::SettingsStore;
 use rtools::shell::Shell;
-use rtools::{hotkey, launcher, settings, tray};
+use rtools::{hotkey, launcher, settings, tray, ui};
 use tracing_subscriber::EnvFilter;
 
 /// Parses the command, hands it to a running instance, or starts the app.
@@ -74,13 +75,18 @@ fn main() {
         .with_quit_mode(QuitMode::Explicit)
         .run(move |cx| {
             gpui_kit::init(cx);
+            ui::register_languages();
             SettingsStore::init(cx);
             launcher::bind_keys(cx);
             settings::window::bind_keys(cx);
 
-            let registry: PluginRegistry = [Box::new(JsonPlugin) as Box<dyn Plugin>]
-                .into_iter()
-                .collect();
+            let registry: PluginRegistry = [
+                Box::new(JsonPlugin) as Box<dyn Plugin>,
+                Box::new(DiffPlugin),
+            ]
+            .into_iter()
+            .collect();
+            registry.bind_keys(cx);
             let data_root = dirs::data_dir()
                 .unwrap_or_else(std::env::temp_dir)
                 .join("rtools");

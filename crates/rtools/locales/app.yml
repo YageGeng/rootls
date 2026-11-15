@@ -53,8 +53,8 @@ launcher:
     en: Back to plugins (Esc)
     zh-CN: 返回插件列表 (Esc)
   detach:
-    en: Open in a separate window (%{key})
-    zh-CN: 在独立窗口中打开 (%{key})
+    en: Open in a separate window
+    zh-CN: 在独立窗口中打开
 tray:
   hint:
     en: Double-tap Ctrl to open
@@ -266,3 +266,97 @@ json:
     xml_no_root:
       en: No root element
       zh-CN: 没有根元素
+diff:
+  title:
+    en: Text Diff
+    zh-CN: 文本对比
+  description:
+    en: Compare two texts
+    zh-CN: 对比两段文本的差异
+  original:
+    en: Original
+    zh-CN: 原文
+  modified:
+    en: Modified
+    zh-CN: 修改后
+  one_line:
+    en: 1 line
+    zh-CN: 1 行
+  lines:
+    en: "%{count} lines"
+    zh-CN: "%{count} 行"
+  compare:
+    en: Compare
+    zh-CN: 对比
+  swap:
+    en: Swap sides
+    zh-CN: 交换两侧
+  clear:
+    en: Clear both sides
+    zh-CN: 清空两侧
+  edit:
+    en: Edit
+    zh-CN: 编辑
+  previous:
+    en: Previous change
+    zh-CN: 上一处
+  next:
+    en: Next change
+    zh-CN: 下一处
+  ignore_whitespace:
+    en: Ignore whitespace
+    zh-CN: 忽略空白
+  ignore_case:
+    en: Ignore case
+    zh-CN: 忽略大小写
+  format_json:
+    en: Format JSON first
+    zh-CN: 先格式化 JSON
+  format_json_unavailable_original:
+    en: "Format JSON first: the original is not valid JSON"
+    zh-CN: 先格式化 JSON：原文不是合法的 JSON
+  format_json_unavailable_modified:
+    en: "Format JSON first: the modified text is not valid JSON"
+    zh-CN: 先格式化 JSON：修改后的文本不是合法的 JSON
+  char_level:
+    en: Highlight changed characters
+    zh-CN: 字符级高亮
+  split:
+    en: Split
+    zh-CN: 并排
+  unified:
+    en: Unified
+    zh-CN: 统一
+  expand_unchanged:
+    en: Expand all unchanged lines
+    zh-CN: 展开全部未改动
+  collapse_unchanged:
+    en: Collapse unchanged lines
+    zh-CN: 折叠未改动
+  identical:
+    en: The texts are identical
+    zh-CN: 两段文本相同
+  identical_options:
+    en: With the current comparison options
+    zh-CN: 按当前对比选项
+  empty_original:
+    en: The original is empty
+    zh-CN: 原文为空
+  empty_modified:
+    en: The modified text is empty
+    zh-CN: 修改后为空
+  empty_both:
+    en: Both sides are empty
+    zh-CN: 两侧都为空
+  cannot_show:
+    en: Cannot show the differences
+    zh-CN: 无法显示差异
+  comparing:
+    en: Comparing…
+    zh-CN: 正在对比…
+  plain_text:
+    en: Plain text
+    zh-CN: 纯文本
+  auto_language:
+    en: "Auto · %{language}"
+    zh-CN: "自动 · %{language}"

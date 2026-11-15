@@ -3,7 +3,6 @@
 mod view;
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::highlighter::{LanguageConfig, LanguageRegistry};
 use gpui_kit::{App, AppContext as _, SharedString, Window};
 use rust_i18n::t;
 use serde_json::Value;
@@ -42,22 +41,9 @@ impl Plugin for JsonPlugin {
         Some(t!("json.recognized", kind = kind.label()).into())
     }
 
-    /// Builds a new editor view.
+    /// Builds a new editor view; the XML grammar of its result pane is
+    /// registered at startup (`crate::ui::register_languages`).
     fn open(&self, launch: Launch, window: &mut Window, cx: &mut App) -> PluginView {
-        // GPUI Kit ships no XML grammar; the result pane needs one for XML
-        // output (the HTML grammar breaks on `_` in tag names).
-        let languages = LanguageRegistry::singleton();
-        if languages.language("xml").is_none() {
-            let xml = LanguageConfig::new(
-                "xml",
-                tree_sitter_xml::LANGUAGE_XML.into(),
-                Vec::new(),
-                tree_sitter_xml::XML_HIGHLIGHT_QUERY,
-                "",
-                "",
-            );
-            languages.register("xml", &xml);
-        }
         let view = cx.new(|cx| JsonPluginView::new(launch, window, cx));
         PluginView::new(view, cx)
     }

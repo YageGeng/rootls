@@ -16,7 +16,13 @@ icon_assets!(
         FoldVertical,
         Quote,
         RemoveFormatting,
-        CodeXml
+        CodeXml,
+        GitCompare,
+        ArrowLeftRight,
+        Eraser,
+        Space,
+        Type,
+        UnfoldVertical
     ]
 );
 

@@ -37,8 +37,11 @@ pub struct Settings {
     pub window_radius: f32,
     /// Interface language.
     pub language: Language,
-    /// The `[json]` table; kept last because TOML writes tables after plain keys.
+    /// The `[json]` table; tables come last because TOML writes them after
+    /// plain keys.
     pub json: JsonSettings,
+    /// The `[diff]` table, changed only from the diff plugin's compare view.
+    pub diff: DiffSettings,
 }
 
 /// Options of the JSON editor plugin.
@@ -50,8 +53,39 @@ pub struct JsonSettings {
     pub soft_wrap: bool,
 }
 
+/// Options of the text diff plugin's compare view.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DiffSettings {
+    /// Side-by-side or single-column diff.
+    pub layout: DiffLayout,
+    /// Lines that differ only in whitespace count as equal.
+    pub ignore_whitespace: bool,
+    /// Lines that differ only in case count as equal.
+    pub ignore_case: bool,
+    /// Compare both sides as key-sorted, formatted JSON when both parse.
+    pub format_json: bool,
+    /// Emphasize changed characters instead of changed words.
+    pub char_level: bool,
+    /// Fold unchanged lines to a few lines of context around each change;
+    /// off shows every line.
+    pub fold_unchanged: bool,
+}
+
+/// How the compare view lays out a diff.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DiffLayout {
+    /// Original and modified side by side.
+    #[default]
+    Split,
+    /// One column with removed lines above added ones.
+    Unified,
+}
+
 impl Default for Settings {
-    /// Theme fonts, 16 px, 4 px window corners, the system language and no soft wrap.
+    /// Theme fonts, 16 px, 4 px window corners, the system language, no soft
+    /// wrap and a split word-level diff with every comparison switch off.
     fn default() -> Self {
         Self {
             ui_font: None,
@@ -60,6 +94,7 @@ impl Default for Settings {
             window_radius: 4.,
             language: Language::System,
             json: JsonSettings::default(),
+            diff: DiffSettings::default(),
         }
     }
 }
@@ -88,31 +123,70 @@ impl fmt::Display for Settings {
     }
 }
 
-impl Settings {
-    /// Reads `path`; a missing file gives the defaults, and so does a broken one
-    /// (with a warning), which is left untouched for the user to fix.
-    pub fn load(path: &Path) -> Settings {
-        match fs::read_to_string(path) {
+/// The settings file, remembering whether its last read failed to parse: the
+/// defaults then stand in for it, and the first save keeps the user's text as
+/// `settings.toml.broken` instead of overwriting it.
+pub struct SettingsFile {
+    path: PathBuf,
+    broken: bool,
+}
+
+impl SettingsFile {
+    /// The file at `path`; nothing is read yet.
+    pub fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            broken: false,
+        }
+    }
+
+    /// Where the settings persist.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Reads the file; a missing file gives the defaults, and so does a broken
+    /// one (with a warning), which is left untouched for the user to fix.
+    pub fn load(&mut self) -> Settings {
+        self.broken = false;
+        match fs::read_to_string(&self.path) {
             Ok(text) => text.parse().unwrap_or_else(|err| {
-                tracing::warn!("ignoring invalid settings file {}: {}", path.display(), err);
+                tracing::warn!(
+                    "ignoring invalid settings file {}: {}",
+                    self.path.display(),
+                    err
+                );
+                self.broken = true;
                 Settings::default()
             }),
             Err(err) if err.kind() == io::ErrorKind::NotFound => Settings::default(),
             Err(err) => {
-                tracing::warn!("reading settings file {} failed: {}", path.display(), err);
+                tracing::warn!(
+                    "reading settings file {} failed: {}",
+                    self.path.display(),
+                    err
+                );
                 Settings::default()
             }
         }
     }
 
-    /// Writes the settings to `path` atomically (temp file, then rename).
-    pub fn save(&self, path: &Path) -> io::Result<()> {
-        if let Some(dir) = path.parent() {
+    /// Writes `settings` atomically (temp file, then rename). A file that
+    /// failed to parse is first moved aside, so a change made while the
+    /// defaults stand in never destroys the user's edits.
+    pub fn save(&mut self, settings: &Settings) -> io::Result<()> {
+        if let Some(dir) = self.path.parent() {
             fs::create_dir_all(dir)?;
         }
-        let temp = path.with_extension("toml.tmp");
-        fs::write(&temp, self.to_string())?;
-        fs::rename(&temp, path)
+        if self.broken {
+            let aside = self.path.with_extension("toml.broken");
+            fs::rename(&self.path, &aside)?;
+            tracing::warn!("kept the invalid settings file as {}", aside.display());
+            self.broken = false;
+        }
+        let temp = self.path.with_extension("toml.tmp");
+        fs::write(&temp, settings.to_string())?;
+        fs::rename(&temp, &self.path)
     }
 }
 
@@ -155,7 +229,7 @@ impl From<&str> for Language {
 
 /// The settings in effect and the file they persist to; an app global.
 pub struct SettingsStore {
-    pub path: PathBuf,
+    pub file: SettingsFile,
     pub settings: Settings,
 }
 
@@ -165,12 +239,14 @@ impl SettingsStore {
     /// Loads `<config dir>/rtools/settings.toml` and applies it; must run
     /// before any window opens.
     pub fn init(cx: &mut App) {
-        let path = dirs::config_dir()
-            .unwrap_or_else(std::env::temp_dir)
-            .join("rtools")
-            .join("settings.toml");
-        let settings = Settings::load(&path);
-        cx.set_global(Self { path, settings });
+        let mut file = SettingsFile::new(
+            dirs::config_dir()
+                .unwrap_or_else(std::env::temp_dir)
+                .join("rtools")
+                .join("settings.toml"),
+        );
+        let settings = file.load();
+        cx.set_global(Self { file, settings });
         Self::apply(cx);
     }
 
@@ -179,7 +255,7 @@ impl SettingsStore {
     /// file is never written here.
     pub fn reload(cx: &mut App) {
         let store = cx.global_mut::<Self>();
-        store.settings = Settings::load(&store.path);
+        store.settings = store.file.load();
         Self::apply(cx);
     }
 
@@ -192,10 +268,10 @@ impl SettingsStore {
         if store.settings == before {
             return;
         }
-        if let Err(err) = store.settings.save(&store.path) {
+        if let Err(err) = store.file.save(&store.settings) {
             tracing::warn!(
                 "saving settings to {} failed: {}",
-                store.path.display(),
+                store.file.path().display(),
                 err
             );
         }

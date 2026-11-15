@@ -8,7 +8,27 @@ version = "0.1.0"
 
 [workspace.dependencies]
 # ui
-gpui-kit = { version = "0.9.1", features = ["tree-sitter"] }
+gpui-kit = { version = "0.9.1", features = [
+    "tree-sitter",
+    "tree-sitter-bash",
+    "tree-sitter-c",
+    "tree-sitter-cpp",
+    "tree-sitter-csharp",
+    "tree-sitter-css",
+    "tree-sitter-go",
+    "tree-sitter-html",
+    "tree-sitter-java",
+    "tree-sitter-javascript",
+    "tree-sitter-markdown",
+    "tree-sitter-markdown-inline",
+    "tree-sitter-python",
+    "tree-sitter-rust",
+    "tree-sitter-sql",
+    "tree-sitter-toml",
+    "tree-sitter-tsx",
+    "tree-sitter-typescript",
+    "tree-sitter-yaml",
+] }
 tree-sitter-xml = "0.7"
 
 # script
@@ -21,6 +41,7 @@ quick-xml = "0.42"
 serde = "1.0"
 serde-saphyr = "2.1"
 serde_json = { version = "1.0", features = ["arbitrary_precision", "preserve_order"] }
+similar = "3"
 toml = "1"
 
 # platform

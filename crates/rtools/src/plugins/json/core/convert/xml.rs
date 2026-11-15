@@ -4,6 +4,7 @@
 //! string when the element holds only text), repeated children become arrays
 //! and empty elements become `null`.
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt::{self, Write as _};
 
@@ -285,12 +286,14 @@ impl XmlWriter<'_, '_> {
             .collect();
         match (children.is_empty(), text) {
             (true, None) => self.line(format_args!("{open}/>")),
-            (true, Some(text)) => self.line(format_args!("{open}>{}</{tag}>", escape(&text))),
+            (true, Some(text)) => {
+                self.line(format_args!("{open}>{}</{tag}>", escape(text.as_ref())))
+            }
             (false, text) => {
                 self.line(format_args!("{open}>"))?;
                 self.depth += 1;
                 if let Some(text) = text {
-                    self.line(format_args!("{}", escape(&text)))?;
+                    self.line(format_args!("{}", escape(text.as_ref())))?;
                 }
                 for (key, value) in children {
                     self.element(key, value)?;
@@ -304,20 +307,25 @@ impl XmlWriter<'_, '_> {
 
 /// Text form of a value used as element text or attribute value, with characters
 /// that XML 1.0 forbids (C0 controls other than tab/LF/CR, U+FFFE, U+FFFF)
-/// replaced by U+FFFD so the output stays well-formed.
-fn scalar_text(value: &Value) -> String {
+/// replaced by U+FFFD so the output stays well-formed. Strings without such
+/// characters, nearly all of them, are borrowed rather than copied.
+fn scalar_text(value: &Value) -> Cow<'_, str> {
     let text = match value {
-        Value::String(text) => text.clone(),
-        Value::Null => String::new(),
-        other => other.to_string(),
+        Value::String(text) => Cow::Borrowed(text.as_str()),
+        Value::Null => Cow::Borrowed(""),
+        other => Cow::Owned(other.to_string()),
     };
+    let forbidden = |ch: char| {
+        matches!(ch, '\u{0}'..='\u{1f}' | '\u{fffe}' | '\u{ffff}')
+            && !matches!(ch, '\t' | '\n' | '\r')
+    };
+    if !text.contains(forbidden) {
+        return text;
+    }
     text.chars()
-        .map(|ch| match ch {
-            '\t' | '\n' | '\r' => ch,
-            '\u{0}'..='\u{1f}' | '\u{fffe}' | '\u{ffff}' => '\u{fffd}',
-            _ => ch,
-        })
-        .collect()
+        .map(|ch| if forbidden(ch) { '\u{fffd}' } else { ch })
+        .collect::<String>()
+        .into()
 }
 
 /// Turns a JSON key into a well-formed XML name.

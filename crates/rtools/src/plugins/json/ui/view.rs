@@ -4,28 +4,25 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{Editor, EditorState, Escape, Input, InputEvent, InputState};
-use gpui_kit::component::separator::Separator;
+use gpui_kit::component::input::{Editor, EditorState, Input, InputEvent, InputState};
 use gpui_kit::component::{ActiveTheme as _, Icon, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 use rust_i18n::t;
 use serde_json::Value;
 
-use crate::plugin::Launch;
+use crate::plugin::{Autosave, Draft, Launch, SearchPanels};
 use crate::plugins::json::core::convert::xml::AsXml;
 use crate::plugins::json::core::{
-    Draft, FILTER_TIMEOUT, FilterEngine, Json, JsonError, Normalized, Rewrite,
+    FILTER_TIMEOUT, FilterEngine, Json, JsonError, Normalized, Rewrite,
 };
 use crate::settings::SettingsStore;
+use crate::ui::{ButtonExt as _, StatusPage, Toolbar};
 
 /// Pause after the last filter keystroke before evaluating.
 const FILTER_DEBOUNCE: Duration = Duration::from_millis(200);
 /// Pause after the last source edit before validating and re-filtering.
 const SYNC_DEBOUNCE: Duration = Duration::from_millis(300);
-/// Pause after the last source edit before writing the draft.
-const SAVE_DEBOUNCE: Duration = Duration::from_secs(1);
 
 /// What the result pane shows.
 enum ResultPane {
@@ -41,7 +38,8 @@ pub struct JsonPluginView {
     right: Entity<EditorState>,
     filter: Entity<InputState>,
     engine: Option<FilterEngine>,
-    draft: Arc<Draft>,
+    /// Keeps the source as `draft.json` across runs.
+    autosave: Autosave,
     pane: ResultPane,
     /// Outcome of the active filter; `None` while the filter is empty.
     filtered: Option<Result<SharedString, JsonError>>,
@@ -56,13 +54,10 @@ pub struct JsonPluginView {
     right_dirty: bool,
     /// Soft wrap as last applied to both editors.
     soft_wrap: bool,
-    /// The source changed since the draft was last written.
-    unsaved: bool,
     filter_task: Task<()>,
     /// Replacing it cancels the previous evaluation, so only the newest result lands.
     eval_task: Task<()>,
     sync_task: Task<()>,
-    save_task: Task<()>,
     /// Background paste normalization or toolbar rewrite.
     rewrite_task: Task<()>,
     xml_task: Task<()>,
@@ -72,18 +67,14 @@ pub struct JsonPluginView {
 impl JsonPluginView {
     /// Builds the view; content comes from the launch input, else the draft.
     pub(super) fn new(launch: Launch, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let draft = Arc::new(Draft::new(&launch.data_dir));
+        let autosave: Autosave = [Draft::new(&launch.data_dir, "draft.json")]
+            .into_iter()
+            .collect();
         // Launch input takes the whole-document paste path below, so the editor
         // starts empty rather than with the draft it replaces.
         let content = match launch.input {
             Some(_) => String::new(),
-            None => draft
-                .load()
-                .unwrap_or_else(|err| {
-                    tracing::warn!("reading the JSON draft failed: {}", err);
-                    None
-                })
-                .unwrap_or_default(),
+            None => autosave.load().pop().unwrap_or_default(),
         };
         let engine = FilterEngine::spawn()
             .map_err(|err| tracing::error!("starting the filter engine failed: {}", err))
@@ -120,11 +111,11 @@ impl JsonPluginView {
             cx.observe_global::<SettingsStore>(|_, cx| cx.notify()),
             // Pending edits must reach the draft even when the app quits or the
             // view goes away before the save debounce fires.
-            cx.on_app_quit(|this, cx| {
-                this.flush_draft(cx);
+            cx.on_app_quit(|this, _| {
+                this.autosave.flush();
                 async {}
             }),
-            cx.on_release(|this, cx| this.flush_draft(cx)),
+            cx.on_release(|this, _| this.autosave.flush()),
         ];
 
         let mut view = Self {
@@ -132,7 +123,7 @@ impl JsonPluginView {
             right,
             filter,
             engine,
-            draft,
+            autosave,
             pane: ResultPane::Hidden,
             filtered: None,
             doc_error: None,
@@ -140,11 +131,9 @@ impl JsonPluginView {
             pending_source: None,
             right_dirty: false,
             soft_wrap,
-            unsaved: false,
             filter_task: Task::ready(()),
             eval_task: Task::ready(()),
             sync_task: Task::ready(()),
-            save_task: Task::ready(()),
             rewrite_task: Task::ready(()),
             xml_task: Task::ready(()),
             _subscriptions: subscriptions,
@@ -164,47 +153,13 @@ impl JsonPluginView {
     /// Reacts to a source edit: save later, re-validate and re-filter after a pause.
     fn on_source_changed(&mut self, cx: &mut Context<Self>) {
         self.revision += 1;
-        self.schedule_save(cx);
+        self.autosave
+            .schedule(vec![self.left.read(cx).text().clone()], cx);
         if matches!(self.pane, ResultPane::Xml(_)) {
             self.show(ResultPane::Hidden, cx);
         }
         self.schedule_sync(SYNC_DEBOUNCE, cx);
         cx.notify();
-    }
-
-    /// Writes the draft after a pause; failures are logged and never touch the editor.
-    fn schedule_save(&mut self, cx: &mut Context<Self>) {
-        self.unsaved = true;
-        let draft = Arc::clone(&self.draft);
-        self.save_task = cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(SAVE_DEBOUNCE).await;
-            // Cloning the rope is cheap; the text is built on the background thread.
-            let Ok(rope) = this.update(cx, |this, cx| {
-                this.unsaved = false;
-                this.left.read(cx).text().clone()
-            }) else {
-                return;
-            };
-            let saved = cx
-                .background_executor()
-                .spawn(async move { draft.save(&rope.to_string()) })
-                .await;
-            if let Err(err) = saved {
-                tracing::warn!("saving the JSON draft failed: {}", err);
-            }
-        });
-    }
-
-    /// Writes a pending draft right away (app quit, view released).
-    fn flush_draft(&mut self, cx: &mut App) {
-        if !self.unsaved {
-            return;
-        }
-        self.unsaved = false;
-        self.save_task = Task::ready(());
-        if let Err(err) = self.draft.save(&self.left.read(cx).text().to_string()) {
-            tracing::warn!("saving the JSON draft failed: {}", err);
-        }
     }
 
     /// After `delay`, validates the source and hands it to the filter engine off
@@ -393,23 +348,6 @@ impl JsonPluginView {
         });
     }
 
-    /// Esc closes the open search panels first; GPUI Kit's inputs would
-    /// otherwise take Esc to move focus and leave a panel open. The panel sits
-    /// beside the editor's text element, so focus in it does not count as
-    /// inside the editor, hence no per-editor focus test.
-    fn close_search(&mut self, _: &Escape, _: &mut Window, cx: &mut Context<Self>) {
-        let mut closed = false;
-        for editor in [&self.left, &self.right] {
-            if editor.read(cx).search_session().open {
-                editor.update(cx, |state, cx| state.close_search(cx));
-                closed = true;
-            }
-        }
-        if !closed {
-            cx.propagate();
-        }
-    }
-
     /// Copies the result pane while it shows a result, otherwise the source.
     fn copy(&self, cx: &mut Context<Self>) {
         let text = match self.shown_result() {
@@ -500,24 +438,8 @@ impl JsonPluginView {
                     JsonError::Script(message) => (t!("json.expression_error"), message.clone()),
                     _ => (t!("json.expression_error"), err.brief()),
                 };
-                v_flex()
-                    .flex_1()
-                    .items_center()
-                    .justify_center()
-                    .gap_2()
-                    .px_6()
-                    .child(
-                        Icon::new(IconName::CircleAlert)
-                            .size_5()
-                            .text_color(theme.danger),
-                    )
-                    .child(div().text_sm().child(headline.to_string()))
-                    .child(
-                        div()
-                            .text_xs()
-                            .text_color(theme.muted_foreground)
-                            .child(detail),
-                    )
+                StatusPage::new(IconName::CircleAlert, theme.danger, headline)
+                    .detail(detail)
                     .into_any_element()
             }
         };
@@ -538,23 +460,12 @@ impl JsonPluginView {
             .text_sm()
             .text_color(theme.muted_foreground)
             .child("this");
-        let tool = |id: &'static str, icon: IconName, key: &'static str| {
-            Button::new(id)
-                .ghost()
-                .small()
-                .icon(icon)
-                .tooltip(t!(key).to_string())
-        };
-        let rewrite = |id, icon, key, rewrite: Rewrite| {
-            tool(id, icon, key)
+        let rewrite = |id, icon, key: &'static str, rewrite: Rewrite| {
+            Toolbar::button(id, icon)
                 .on_click(cx.listener(move |this, _, _, cx| this.rewrite(rewrite, cx)))
+                .with_tooltip(t!(key))
         };
-        h_flex()
-            .px_2()
-            .py_1p5()
-            .gap_2()
-            .border_t_1()
-            .border_color(theme.border)
+        Toolbar::default()
             .child(
                 div().flex_1().min_w_0().child(
                     Input::new(&self.filter)
@@ -581,7 +492,7 @@ impl JsonPluginView {
                         "json.minify",
                         Rewrite::Minify,
                     ))
-                    .child(Separator::vertical().h_4().mx_1())
+                    .child(Toolbar::separator())
                     .child(rewrite(
                         "escape",
                         IconName::Quote,
@@ -594,16 +505,25 @@ impl JsonPluginView {
                         "json.unescape",
                         Rewrite::Unescape,
                     ))
-                    .child(Separator::vertical().h_4().mx_1())
+                    .child(Toolbar::separator())
                     .child(
-                        tool("xml", IconName::CodeXml, "json.to_xml")
-                            .on_click(cx.listener(|this, _, _, cx| this.convert_to_xml(cx))),
+                        Toolbar::button("xml", IconName::CodeXml)
+                            .on_click(cx.listener(|this, _, _, cx| this.convert_to_xml(cx)))
+                            .with_tooltip(t!("json.to_xml")),
                     )
                     .child(
-                        tool("copy", IconName::Copy, "json.copy")
-                            .on_click(cx.listener(|this, _, _, cx| this.copy(cx))),
+                        Toolbar::button("copy", IconName::Copy)
+                            .on_click(cx.listener(|this, _, _, cx| this.copy(cx)))
+                            .with_tooltip(t!("json.copy")),
                     ),
             )
+    }
+}
+
+impl SearchPanels for JsonPluginView {
+    /// Both editors open the search panel; the result pane is read-only.
+    fn search_editors(&self) -> impl IntoIterator<Item = &Entity<EditorState>> {
+        [&self.left, &self.right]
     }
 }
 
