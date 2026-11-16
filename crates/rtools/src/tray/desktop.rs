@@ -68,9 +68,13 @@ pub fn start(
         }
     }));
 
-    let icon = TrayIconBuilder::new()
-        .with_icon(icon)
-        .with_icon_as_template(cfg!(target_os = "macos"))
+    // The template setter is macOS-only; Windows keeps the full-color icon.
+    #[cfg(target_os = "macos")]
+    let builder = TrayIconBuilder::new().with_icon_templated(icon);
+    #[cfg(target_os = "windows")]
+    let builder = TrayIconBuilder::new().with_icon(icon);
+
+    let icon = builder
         .with_tooltip(format!("{TITLE} — {}", t!("tray.hint")))
         .with_menu(Box::new(menu))
         .with_menu_on_left_click(false)

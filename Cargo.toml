@@ -49,6 +49,8 @@ dirs = "7"
 evdev = "0.13"
 interprocess = "2.4"
 ksni = { version = "0.3", default-features = false }
+objc2-core-foundation = { version = "0.3.2", default-features = false }
+objc2-core-graphics = { version = "0.3.2", default-features = false }
 rdev = "0.5"
 sys-locale = "0.3"
 tray-icon = "0.26"

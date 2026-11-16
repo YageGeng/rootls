@@ -2,7 +2,7 @@
 
 一个用 Rust 编写、常驻后台的桌面效率启动器，灵感来自 uTools。界面基于 [GPUI](https://www.gpui.rs) 与 [gpui-kit](https://gpui-kit.com) 绘制，双击 `Ctrl` 随时呼出；内置插件有 **JSON 编辑器** 和 **文本对比**。
 
-> 目前主要在 Linux（KDE Plasma · Wayland）上开发和验证。X11、macOS、Windows 的代码路径已经实现，但尚未实测。
+> 目前主要在 Linux（KDE Plasma · Wayland）上开发和验证。macOS 支持源码构建和 `.app` 打包；X11、macOS、Windows 的运行时功能尚未完整验证。
 
 ## 功能
 
@@ -64,6 +64,36 @@
 - **外观**：界面字体、编辑器字体、字号（12–20）、窗口圆角（0–24）
 - **语言**：跟随系统 / 简体中文 / English
 - **JSON 编辑器**：自动换行
+
+## 安装（macOS）
+
+依赖 Rust stable 和 Xcode Command Line Tools（未安装时运行 `xcode-select --install`）。打包使用 macOS 自带的 `sips`、`iconutil`、`plutil` 和 `codesign`，无需安装额外的图标转换工具。
+
+在项目根目录执行：
+
+```bash
+./packaging/macos/bundle.sh
+```
+
+脚本会构建 release 版本，在 `target/release/rtools.app` 中放入可执行文件、应用信息和包含 Retina 尺寸的应用图标，并完成本地临时签名与校验。版本号取自 Cargo 包元数据，图标由 `assets/icons/rtools.svg` 生成；菜单栏图标已经内嵌在可执行文件中。产物对应当前 Mac 的原生架构，不是 Universal Binary。
+
+把生成的 `rtools.app` 拖到「应用程序」，或安装到当前用户目录后启动：
+
+```bash
+mkdir -p "$HOME/Applications"
+ditto target/release/rtools.app "$HOME/Applications/rtools.app"
+open "$HOME/Applications/rtools.app"
+```
+
+更新时先从菜单栏退出 rtools，再重新打包并复制。打包脚本不会自动安装应用、创建命令行快捷方式或设置开机启动；安装 `.app` 后仍可直接调用包内程序：
+
+```bash
+"$HOME/Applications/rtools.app/Contents/MacOS/rtools" toggle
+```
+
+双击 `Ctrl` 使用 macOS 原始键盘事件监听，不读取输入法布局或转换输入字符。需要在「系统设置 → 隐私与安全性 → 辅助功能 / 输入监控」中按系统提示为 rtools 授权，然后重启应用；从终端启动时可能还需要为终端应用授权。未授权时可通过菜单栏或上述 `toggle` 命令呼出。
+
+这里的临时签名不包含 Developer ID 签名或 Apple 公证，适用于本机源码构建；对外发布仍需另行配置签名和公证。
 
 ## 安装（Linux）
 
@@ -168,4 +198,4 @@ cargo fmt --all                              # 格式化
 - 调整后的面板大小只在本次运行期间保留。
 - 文本对比「先格式化 JSON」时，数字的指数写法会统一（`1e2` 写成 `1e+2`），只差指数写法的数字不算差异。
 - 手改 `settings.toml` 写错时按默认值运行；之后在界面里改设置，原文件会先另存为 `settings.toml.broken` 再写入。
-- macOS、Windows 尚未实测。
+- macOS 运行时功能及 Windows 尚未完整验证。

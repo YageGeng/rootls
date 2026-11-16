@@ -6005,6 +6005,8 @@ dependencies = [
  "image",
  "interprocess",
  "ksni",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
  "quick-xml 0.42.0",
  "rdev",
  "rquickjs",

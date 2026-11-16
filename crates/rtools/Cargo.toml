@@ -40,5 +40,13 @@ ksni = { workspace = true, features = ["async-io"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 # platform
-rdev = { workspace = true }
 tray-icon = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# platform
+objc2-core-foundation = { workspace = true, features = ["CFMachPort", "CFRunLoop"] }
+objc2-core-graphics = { workspace = true, features = ["CGEvent", "CGEventTypes", "CGRemoteOperation"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# platform
+rdev = { workspace = true }

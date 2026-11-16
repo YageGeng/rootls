@@ -134,11 +134,14 @@ pub struct PluginRegistry { plugins: Vec<Box<dyn Plugin>> }
 |---|---|---|
 | Linux Wayland | 全屏透明 `WindowKind::LayerShell` 覆盖层（四边锚定、`exclusive_zone = -1`、取第一个输出屏幕，键盘交互 `OnDemand`），不经 GPUI Kit 的窗口根（否则整屏不透明并带窗口边框），启动器在其中自绘面板：每次呼出屏幕正中（插件视图按自身高度居中，列表按显示时的高度居中，输入过滤改变行数时顶边不动），拖插件标题栏或列表底栏移动；插件视图可拖四边与四角（面板外 0.5 rem 的感应带）调整大小，最小 30×20 rem，大小在本次运行内保留，列表始终保持自身默认宽度；点面板外即隐藏（2026-11-14：layer-shell 表面创建后无法移动，原「不锚定居中」方案也因 GPUI 按去掉阴影内边距的尺寸设置表面大小而偏右下） | **双击 Ctrl**：读 `/dev/input`（evdev，用户需在 `input` 组） |
 | Linux X11 | `WindowKind::PopUp`，无标题栏，在鼠标所在屏幕居中；拖标题栏或底栏交给系统移动窗口 | **双击 Ctrl**：evdev |
-| macOS / Windows | 同上 | **双击 Ctrl**：`rdev` 全局键盘监听（macOS 需在系统设置授予「辅助功能」权限） |
+| macOS | 同上 | **双击 Ctrl**：Quartz `CGEventTap` 只读监听原始按键与修饰键事件；需授予「辅助功能」或「输入监控」权限，不查询输入法布局或转换字符 |
+| Windows | 同上 | **双击 Ctrl**：`rdev` 全局键盘监听 |
 
 **不注册任何组合键作为退路**（用户 2026-11-13 明确：Linux 上 `Alt+Space` 是 KRunner 的默认快捷键，坚决不能占用）。双击 Ctrl 不可用时只记日志，提示加入 `input` 组 / 授予权限 / 自行把快捷键绑定到 `rtools toggle`。
 
 **双击 Ctrl 的判定**（2026-11-13 用户决定）：一次「单击」= Ctrl 按下到松开不超过 300 ms，且期间没有按其他键；第二次单击的按下距第一次松开不超过 350 ms 即触发。按住时的自动重复忽略；左右 Ctrl 等价。键盘事件只用于这一判定，绝不记录或保存任何按键。加入 `input` 组意味着该用户的所有程序都能读取键盘输入，这是用户知情后的选择。
+
+macOS 监听使用独立线程的 RunLoop；不调用 `rdev` 的字符转换，因为该路径在后台线程查询输入源时会触发系统队列断言。已按住的 Shift/Option/Command/Fn 会阻止 Ctrl 连击，左右 Ctrl 同时按住视为一次整体按下；系统暂时停用事件监听时清空未完成的连击并重新启用，权限不足时记录提示，保留菜单栏和命令行入口。
 
 所有窗口的 Wayland `app_id` 为 `dev.rtools.rtools`，与仓库中的 `packaging/linux/dev.rtools.rtools.desktop` 对应，桌面据此显示名称并归组窗口。`packaging/linux/install.sh` 安装到用户目录：剥离符号的二进制（`~/.local/bin/rtools`）、`.desktop`，以及以同名 `dev.rtools.rtools` 安装进 hicolor 的应用图标（scalable SVG + 32/256 PNG）。
 

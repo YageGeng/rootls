@@ -106,7 +106,7 @@ fn main() {
 
             // Double-tap Ctrl; without it the launcher is reachable through `rtools toggle`.
             match hotkey::start(commands) {
-                Ok(()) => tracing::info!("double-tap Ctrl enabled"),
+                Ok(()) => tracing::info!("double-tap Ctrl listener started"),
                 Err(err) => tracing::warn!(
                     "double-tap Ctrl unavailable ({}); on Linux add yourself to the input group (`sudo usermod -aG input $USER`), on macOS grant Accessibility access, or bind a system shortcut to `rtools toggle`",
                     err

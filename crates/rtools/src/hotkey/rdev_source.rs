@@ -1,5 +1,4 @@
-//! macOS / Windows key source: `rdev`'s global listener (macOS needs the
-//! Accessibility permission).
+//! Windows key source: `rdev`'s global listener.
 
 use std::io;
 use std::thread;
@@ -42,7 +41,7 @@ pub fn start(commands: UnboundedSender<ShellCommand>) -> io::Result<()> {
             });
             if let Err(err) = result {
                 tracing::warn!(
-                    "double-tap Ctrl unavailable ({:?}); on macOS allow rtools under System Settings > Privacy & Security > Accessibility, or bind a shortcut to `rtools toggle`",
+                    "double-tap Ctrl unavailable ({:?}); bind a shortcut to `rtools toggle`",
                     err
                 );
             }
