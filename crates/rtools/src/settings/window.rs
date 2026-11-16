@@ -42,16 +42,22 @@ type ThemeChoices = SearchableVec<Choice<SharedString>>;
 
 /// A page of the sidebar navigation.
 #[derive(Clone, Copy, PartialEq)]
-enum Page {
+pub(crate) enum Page {
     Appearance,
     Language,
     /// Options of the JSON editor plugin.
     Json,
+    Translate,
 }
 
 impl Page {
     /// Every page, in sidebar order: the app first, then plugins.
-    const ALL: [Page; 3] = [Page::Appearance, Page::Language, Page::Json];
+    const ALL: [Page; 4] = [
+        Page::Appearance,
+        Page::Language,
+        Page::Json,
+        Page::Translate,
+    ];
 
     /// Translation keys of the page title and subtitle.
     fn keys(self) -> (&'static str, &'static str) {
@@ -59,6 +65,7 @@ impl Page {
             Page::Appearance => ("settings.appearance", "settings.appearance_subtitle"),
             Page::Language => ("settings.language", "settings.language_subtitle"),
             Page::Json => ("settings.json", "settings.json_subtitle"),
+            Page::Translate => ("translate.title", "translate.settings_subtitle"),
         }
     }
 }
@@ -172,6 +179,7 @@ pub struct SettingsWindow {
     focus: FocusHandle,
     search: Entity<InputState>,
     page: Page,
+    translate: Option<Entity<super::translate::TranslateSettingsView>>,
     appearance: Entity<SelectState<AppearanceChoices>>,
     light_theme: Entity<SelectState<ThemeChoices>>,
     dark_theme: Entity<SelectState<ThemeChoices>>,
@@ -348,6 +356,7 @@ impl SettingsWindow {
             focus: cx.focus_handle(),
             search,
             page: Page::Appearance,
+            translate: None,
             appearance,
             light_theme,
             dark_theme,
@@ -432,7 +441,7 @@ impl SettingsWindow {
     }
 
     /// Shows a page, leaving any search.
-    fn open_page(&mut self, page: Page, window: &mut Window, cx: &mut Context<Self>) {
+    pub(crate) fn open_page(&mut self, page: Page, window: &mut Window, cx: &mut Context<Self>) {
         self.page = page;
         self.search
             .update(cx, |state, cx| state.set_value("", window, cx));
@@ -587,9 +596,15 @@ impl SettingsWindow {
     }
 
     /// File path row, page title and the visible setting rows.
-    fn render_content(&self, query: &str, cx: &Context<Self>) -> impl IntoElement {
+    fn render_content(
+        &mut self,
+        query: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
         let theme = cx.theme();
         let (border, muted) = (theme.border, theme.muted_foreground);
+        let mono_font = theme.mono_font_family.clone();
         let rows: Vec<Row> = Row::ALL
             .into_iter()
             .filter(|row| {
@@ -646,7 +661,28 @@ impl SettingsWindow {
                     .child(div().w_56().flex_none().child(self.control(*row, cx))),
             );
         }
-        if rows.is_empty() {
+        let show_translate = if query.is_empty() {
+            self.page == Page::Translate
+        } else {
+            [
+                "translate.title",
+                "translate.settings_subtitle",
+                "translate.endpoint",
+                "translate.model",
+                "translate.key_title",
+            ]
+            .iter()
+            .any(|key| t!(*key).to_lowercase().contains(query))
+                || "deepseek api key endpoint".contains(query)
+        };
+        if show_translate {
+            // Unrelated settings pages must not trigger a Keychain read or authorization dialog.
+            let translate = self.translate.get_or_insert_with(|| {
+                cx.new(|cx| super::translate::TranslateSettingsView::new(window, cx))
+            });
+            body = body.child(translate.clone());
+        }
+        if rows.is_empty() && !show_translate {
             body = body.child(
                 div()
                     .pt_10()
@@ -673,7 +709,7 @@ impl SettingsWindow {
                             .flex_1()
                             .min_w_0()
                             .truncate()
-                            .font_family(theme.mono_font_family.clone())
+                            .font_family(mono_font)
                             .text_sm()
                             .text_color(muted)
                             .child(self.path_label.clone()),
@@ -727,7 +763,7 @@ impl Render for SettingsWindow {
                     .min_h_0()
                     .items_stretch()
                     .child(self.render_sidebar(!query.is_empty(), window, cx))
-                    .child(self.render_content(&query, cx)),
+                    .child(self.render_content(&query, window, cx)),
             )
     }
 }

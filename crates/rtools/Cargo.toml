@@ -8,6 +8,14 @@ version.workspace = true
 gpui-kit = { workspace = true }
 tree-sitter-xml = { workspace = true }
 
+# network
+async-io = { workspace = true }
+rig-reqwest = { workspace = true }
+url = { workspace = true }
+
+# ai
+rig-core = { workspace = true }
+
 # script
 rquickjs = { workspace = true }
 

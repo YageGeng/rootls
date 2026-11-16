@@ -22,7 +22,11 @@ pub fn start(commands: UnboundedSender<ShellCommand>) -> io::Result<()> {
             let result = rdev::listen(move |event| {
                 let (kind, action) = match event.event_type {
                     EventType::KeyPress(Key::ControlLeft | Key::ControlRight) => {
-                        let action = if ctrl_down { KeyAction::Repeat } else { KeyAction::Press };
+                        let action = if ctrl_down {
+                            KeyAction::Repeat
+                        } else {
+                            KeyAction::Press
+                        };
                         ctrl_down = true;
                         (KeyKind::Ctrl, action)
                     }

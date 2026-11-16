@@ -1,6 +1,6 @@
 # rtools
 
-一个用 Rust 编写、常驻后台的桌面效率启动器，灵感来自 uTools。界面基于 [GPUI](https://www.gpui.rs) 与 [gpui-kit](https://gpui-kit.com) 绘制，双击 `Ctrl` 随时呼出；内置插件有 **JSON 编辑器** 和 **文本对比**。
+一个用 Rust 编写、常驻后台的桌面效率启动器，灵感来自 uTools。界面基于 [GPUI](https://www.gpui.rs) 与 [gpui-kit](https://gpui-kit.com) 绘制，双击 `Ctrl` 随时呼出；内置插件有 **JSON 编辑器**、**文本对比** 和 **AI 翻译**。
 
 > 目前主要在 Linux（KDE Plasma · Wayland）上开发和验证。macOS 支持源码构建和 `.app` 打包；X11、macOS、Windows 的运行时功能尚未完整验证。
 
@@ -57,13 +57,27 @@
 - **不算差异**：`\r\n` 与 `\n`、末尾有没有换行。
 - **后台计算**：大文本也不会卡住界面；超过 2 秒的计算会给出正确但可能不是最短的结果。
 
+### AI 翻译
+
+输入 `translate`、`fanyi` 或「翻译」打开，也可粘贴文本后选择「翻译这段文本」。支持中文与英文互译，自动判断方向或手动指定；底栏提供「通用」「技术」两种场景。语言选择位于各自的控制栏，上方编辑原文，下方显示可选择的译文；分隔线可拖动，译文控制栏中央的按钮交换上下文本，停止当前请求并保留原文撤销能力。
+
+- **主动翻译**：原文框按 `Enter` 翻译、`Shift+Enter` 换行，也支持点击「翻译」或 `Cmd+Enter`（其他平台 `Ctrl+Enter`）。输入法候选确认不会提交；普通输入、搜索和粘贴不会联网。单次最多 20,000 字符。
+- **流式与取消**：停止按钮或 `Esc` 取消当前请求并保留部分译文；编辑原文或修改方向、场景也会取消。旧结果和不完整结果会明确标记。隐藏启动器后继续，分离窗口沿用同一会话；退出应用不保存翻译历史。
+- **复制**：原文和译文各自提供全文复制按钮；`Cmd+Shift+C`（其他平台 `Ctrl+Shift+C`）复制完整译文，普通复制仍只复制选中文本。译文按纯文本展示，保留 Markdown 源码，不加载远程内容。
+- **配置**：插件底栏齿轮按钮悬浮显示「设置」，点击直达「AI 翻译」设置页。默认完整 endpoint 为 `https://api.deepseek.com/chat/completions`、模型 `deepseek-flash`；官方连接关闭思考模式。连接地址和模型支持自定义，修改后点击「保存连接」。
+- **密钥**：优先使用为当前 endpoint 保存的 Key，否则读取应用进程的 `DEEPSEEK_API_KEY`。Key 使用系统凭据存储（macOS 钥匙串），不会写入 `settings.toml`。移除已保存的 Key 后可以回退到环境变量。Finder 启动的应用不一定继承终端变量，设置页会显示实际来源。
+- **连接测试**：使用固定短文本验证模型能否返回内容，可能产生少量费用，不会发送编辑器原文。更换连接不会复用其他 endpoint 已保存的 Key；自定义服务会收到所用 Key 和原文。
+
+协议由 `rig-core` 的 DeepSeek wire 处理，HTTP 由 `rig-reqwest` 提供；不启用自动重试或凭据重定向。技术模式通过提示词要求保留代码、标识符和链接，但仍应核对模型输出。
+
 ### 设置
 
-从托盘菜单、启动器里的「设置」项或 `rtools settings` 打开设置窗口，修改立即生效：
+从托盘菜单、启动器里的「设置」项或 `rtools settings` 打开设置窗口，外观和语言修改立即生效：
 
 - **外观**：明暗模式（跟随系统 / 浅色 / 深色）、浅色主题、深色主题、界面字体、编辑器字体、字号（12–20）、窗口圆角（0–24）。内置 GPUI Kit 官方 36 种配色和 2 种默认配色，包含 Catppuccin、Tokyo Night、Ayu、Gruvbox、Solarized 等；主题下拉框支持搜索，界面与代码配色同步切换并保存，离线可用。
 - **语言**：跟随系统 / 简体中文 / English
 - **JSON 编辑器**：自动换行
+- **AI 翻译**：连接地址和模型、系统凭据与环境变量来源、连接测试；连接和 Key 分别显式保存。
 
 ## 安装（macOS）
 
@@ -198,7 +212,7 @@ cargo clippy --all-targets -- -D warnings    # 静态检查
 cargo fmt --all                              # 格式化
 ```
 
-- **代码结构**（`crates/rtools/src`）：`shell` 管理窗口与命令，`launcher` 是启动器，`settings` 是设置与设置窗口，`hotkey` 负责双击 `Ctrl`，`tray` 是托盘，`instance` 负责单实例，`plugin` 定义插件契约（含共享的草稿自动保存），`ui` 是启动器与插件共用的界面件；插件位于 `plugins/`（`json`、`diff`），每个都分为不依赖界面的 `core` 和界面层 `ui`；插件之间互不引用。
+- **代码结构**（`crates/rtools/src`）：`shell` 管理窗口与命令，`launcher` 是启动器，`settings` 是设置与设置窗口，`hotkey` 负责双击 `Ctrl`，`tray` 是托盘，`instance` 负责单实例，`plugin` 定义插件契约（含共享的草稿自动保存），`ui` 是启动器与插件共用的界面件；插件位于 `plugins/`（`json`、`diff`、`translate`）；JSON / Diff 分为 `core` 和 `ui`，翻译按配置、Rig 客户端、凭据、会话状态与视图组织；插件之间互不引用。
 - **设计文档**：`docs/superpowers/specs/2026-11-13-rtools-design.md`，文本对比见 `2026-11-14-rtools-diff-plugin-design.md`
 - **约定**：代码规范见 `AGENTS.md`，提交信息格式见 `.gitmessage`；仓库配置了 pre-commit（fmt + clippy）。
 

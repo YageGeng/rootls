@@ -11,6 +11,7 @@ use rtools::instance::InstanceName;
 use rtools::plugin::{Plugin, PluginRegistry};
 use rtools::plugins::diff::ui::DiffPlugin;
 use rtools::plugins::json::ui::JsonPlugin;
+use rtools::plugins::translate::{TranslatePlugin, client::DeepSeekClient};
 use rtools::settings::SettingsStore;
 use rtools::shell::Shell;
 use rtools::{hotkey, launcher, settings, tray, ui};
@@ -77,12 +78,14 @@ fn main() {
             gpui_kit::init(cx);
             ui::register_languages();
             SettingsStore::init(cx);
+            if let Ok(client) = DeepSeekClient::new() { cx.set_global(client); }
             launcher::bind_keys(cx);
             settings::window::bind_keys(cx);
 
             let registry: PluginRegistry = [
                 Box::new(JsonPlugin) as Box<dyn Plugin>,
                 Box::new(DiffPlugin),
+                Box::new(TranslatePlugin),
             ]
             .into_iter()
             .collect();

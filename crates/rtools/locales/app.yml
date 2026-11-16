@@ -390,3 +390,281 @@ diff:
   auto_language:
     en: "Auto · %{language}"
     zh-CN: "自动 · %{language}"
+
+translate:
+  title:
+    en: "AI Translate"
+    zh-CN: "AI 翻译"
+  description:
+    en: "Translate between Chinese and English with DeepSeek"
+    zh-CN: "使用 DeepSeek 进行中英互译"
+  recognized:
+    en: "Translate this text"
+    zh-CN: "翻译这段文本"
+  settings_subtitle:
+    en: "Configure the DeepSeek connection and API key, and test the connection."
+    zh-CN: "配置 DeepSeek 连接、API Key，并测试连接。"
+  auto:
+    en: "Auto"
+    zh-CN: "自动"
+  auto_detect:
+    en: "Detect language"
+    zh-CN: "自动检测"
+  source_language:
+    en: "Source language"
+    zh-CN: "原文语言"
+  target_language:
+    en: "Target language"
+    zh-CN: "译文语言"
+  language_choice:
+    en: "%{kind}: %{language}"
+    zh-CN: "%{kind}：%{language}"
+  detected_english:
+    en: "English detected"
+    zh-CN: "已识别英语"
+  detected_chinese:
+    en: "Chinese detected"
+    zh-CN: "已识别中文"
+  english:
+    en: "English"
+    zh-CN: "英语"
+  chinese:
+    en: "Simplified Chinese"
+    zh-CN: "简体中文"
+  exchange_text:
+    en: "Swap source and translation"
+    zh-CN: "交换原文与译文"
+  enter_hint:
+    en: "Enter to translate · Shift+Enter for a new line"
+    zh-CN: "Enter 翻译 · Shift+Enter 换行"
+  en_zh:
+    en: "English → Chinese"
+    zh-CN: "英文 → 中文"
+  zh_en:
+    en: "Chinese → English"
+    zh-CN: "中文 → 英文"
+  general:
+    en: "General"
+    zh-CN: "通用"
+  technical:
+    en: "Technical"
+    zh-CN: "技术"
+  direction:
+    en: "Direction"
+    zh-CN: "方向"
+  scenario:
+    en: "Style"
+    zh-CN: "场景"
+  undetected:
+    en: "Not detected"
+    zh-CN: "待识别"
+  input:
+    en: "Source"
+    zh-CN: "原文"
+  output:
+    en: "Translation"
+    zh-CN: "译文"
+  input_hint:
+    en: "Type or paste Chinese or English…"
+    zh-CN: "输入或粘贴中文、英文…"
+  output_hint:
+    en: "Translation appears here"
+    zh-CN: "译文将在这里显示"
+  previous_result:
+    en: "Previous translation · different request"
+    zh-CN: "上次译文 · 与当前请求不一致"
+  partial_result:
+    en: "Partial translation · incomplete"
+    zh-CN: "部分译文 · 尚未完整"
+  copy_previous:
+    en: "Copy previous"
+    zh-CN: "复制上次译文"
+  copy_partial:
+    en: "Copy partial"
+    zh-CN: "复制部分译文"
+  copy:
+    en: "Copy translation"
+    zh-CN: "复制译文"
+  copy_source:
+    en: "Copy source"
+    zh-CN: "复制原文"
+  source_copied:
+    en: "Source copied"
+    zh-CN: "原文已复制"
+  copied:
+    en: "Copied"
+    zh-CN: "已复制"
+  clear:
+    en: "Clear"
+    zh-CN: "清空"
+  submit:
+    en: "Translate"
+    zh-CN: "翻译"
+  stop:
+    en: "Stop"
+    zh-CN: "停止"
+  retry:
+    en: "Retry"
+    zh-CN: "重试"
+  settings:
+    en: "Settings…"
+    zh-CN: "设置…"
+  configure:
+    en: "Configure DeepSeek…"
+    zh-CN: "配置 DeepSeek…"
+  ready:
+    en: "Ready · translate when you choose"
+    zh-CN: "准备就绪 · 手动发起翻译"
+  connecting:
+    en: "Connecting…"
+    zh-CN: "正在连接…"
+  streaming:
+    en: "Translating…"
+    zh-CN: "正在翻译…"
+  complete:
+    en: "Translation complete"
+    zh-CN: "翻译完成"
+  stopped:
+    en: "Stopped; translation is incomplete"
+    zh-CN: "已停止，译文不完整"
+  stale:
+    en: "Translate again"
+    zh-CN: "待重新翻译"
+  incomplete:
+    en: "Incomplete"
+    zh-CN: "未完成"
+  truncated:
+    en: "Output limit reached; translation is incomplete. Shorten the source and retry."
+    zh-CN: "达到输出上限，译文不完整；请缩短原文后重试。"
+  connection:
+    en: "Connection"
+    zh-CN: "连接"
+  endpoint:
+    en: "Request URL (full endpoint)"
+    zh-CN: "请求地址（完整 endpoint）"
+  model:
+    en: "Model name"
+    zh-CN: "模型名称"
+  endpoint_hint:
+    en: "Enter the full request URL; no path is appended. HTTPS or loopback HTTP only, without query parameters."
+    zh-CN: "填写完整请求地址；不会自动补充路径。仅支持 HTTPS 或本机 HTTP，不接受查询参数。"
+  custom_host:
+    en: "This custom service, %{host}, will receive your API key and source text."
+    zh-CN: "此自定义服务 %{host} 将收到 API Key 和原文。"
+  save_connection:
+    en: "Save connection"
+    zh-CN: "保存连接"
+  restore_defaults:
+    en: "Restore official defaults"
+    zh-CN: "恢复官方默认值"
+  connection_dirty:
+    en: "Connection changes are not saved. Save before configuring a key or testing."
+    zh-CN: "连接尚未保存。保存后再配置 Key 或测试连接。"
+  connection_saved:
+    en: "Connection saved."
+    zh-CN: "连接已保存。"
+  key_title:
+    en: "API key"
+    zh-CN: "API Key"
+  key_loading:
+    en: "Checking credential source…"
+    zh-CN: "正在读取凭据来源…"
+  key_saved_source:
+    en: "Current source: saved key"
+    zh-CN: "当前来源：已保存的 Key"
+  key_environment_source:
+    en: "Current source: DEEPSEEK_API_KEY environment variable"
+    zh-CN: "当前来源：DEEPSEEK_API_KEY 环境变量"
+  key_missing_source:
+    en: "No key is configured"
+    zh-CN: "尚未配置可用的 Key"
+  key_hint:
+    en: "A saved key takes priority over the environment and is stored separately for each endpoint. Empty input does not replace it; removing it allows the environment fallback. Only this process’s environment is read; Finder launches may not inherit terminal settings."
+    zh-CN: "已保存的 Key 优先于环境变量，并按请求地址单独存储。留空不会覆盖；移除后可回退到环境变量。仅读取应用进程的环境变量，从 Finder 启动可能无法继承终端设置。"
+  save_key:
+    en: "Save key"
+    zh-CN: "保存 Key"
+  remove_key:
+    en: "Remove saved key"
+    zh-CN: "移除已保存的 Key"
+  key_saved:
+    en: "Key saved to the system credential store."
+    zh-CN: "Key 已保存到系统凭据存储。"
+  key_removed:
+    en: "Saved key removed. Checking the environment fallback."
+    zh-CN: "已移除保存的 Key，正在重新检查环境变量。"
+  test_connection:
+    en: "Test connection"
+    zh-CN: "测试连接"
+  testing:
+    en: "Testing…"
+    zh-CN: "正在测试…"
+  test_hint:
+    en: "Sends fixed short text and may incur a small charge. Your editor text is not sent."
+    zh-CN: "发送固定短文本，可能产生少量费用；不会发送编辑器原文。"
+  test_success:
+    en: "Connection verified; the model returned content."
+    zh-CN: "连接正常，模型已返回内容。"
+  error_save:
+    en: "Could not save settings. Check the settings file permissions."
+    zh-CN: "保存配置失败，请检查设置文件的访问权限。"
+  error_endpoint:
+    en: "Invalid endpoint. Use a full HTTPS or loopback HTTP URL without credentials, a query or a fragment."
+    zh-CN: "请求地址无效。请使用完整 HTTPS 地址或本机 HTTP，且不包含账号、密码、查询参数或片段。"
+  error_model:
+    en: "Enter a valid model name."
+    zh-CN: "请输入有效的模型名称。"
+  error_direction:
+    en: "Cannot determine the source language. Choose a direction."
+    zh-CN: "无法确定正文语言，请手动选择翻译方向。"
+  error_empty_input:
+    en: "Enter text to translate."
+    zh-CN: "请输入需要翻译的文本。"
+  error_input_limit:
+    en: "Source exceeds 20,000 characters. Shorten it before translating."
+    zh-CN: "原文超过 20,000 字符，请缩短后再翻译。"
+  error_key:
+    en: "No API key is configured. Configure DeepSeek first."
+    zh-CN: "尚未配置 API Key，请先配置 DeepSeek。"
+  error_credentials:
+    en: "Credential storage is unavailable or the key is invalid. Check keychain access or use the process environment variable."
+    zh-CN: "系统凭据存储不可用或 Key 无效。请检查钥匙串访问；也可使用进程环境变量。"
+  error_auth:
+    en: "Authentication failed. Check the active key and endpoint."
+    zh-CN: "认证失败，请检查当前使用的 Key 和请求地址。"
+  error_balance:
+    en: "Insufficient account balance. Check the service account."
+    zh-CN: "服务账户余额不足，请检查该服务的账户。"
+  error_route:
+    en: "Endpoint or model not found. Check connection settings."
+    zh-CN: "请求地址或模型不存在，请检查连接设置。"
+  error_parameters:
+    en: "The service rejected the request parameters. Check the model name and API compatibility."
+    zh-CN: "服务拒绝了请求参数，请检查模型名称及接口兼容性。"
+  error_rate:
+    en: "Rate limit reached. Wait before retrying."
+    zh-CN: "请求过于频繁，请稍后手动重试。"
+  error_redirect:
+    en: "The service redirected the request. Enter the final endpoint to keep your key protected."
+    zh-CN: "服务返回了重定向。为保护 Key，请直接填写最终请求地址。"
+  error_service:
+    en: "The model service is unavailable. Try again later."
+    zh-CN: "模型服务暂时不可用，请稍后重试。"
+  error_network:
+    en: "Connection failed. Check the network, certificate and endpoint."
+    zh-CN: "连接失败，请检查网络、证书和请求地址。"
+  error_timeout:
+    en: "Response timed out. Received text has been kept."
+    zh-CN: "等待响应超时，已保留收到的译文。"
+  error_protocol:
+    en: "The response format is incompatible; translation did not complete."
+    zh-CN: "响应格式不兼容，未能完成翻译。"
+  error_interrupted:
+    en: "Connection interrupted; translation is incomplete."
+    zh-CN: "连接中断，译文不完整。"
+  error_empty_response:
+    en: "The model returned no translation. Check model settings and retry."
+    zh-CN: "模型没有返回译文，请检查模型设置后重试。"
+  error_output_limit:
+    en: "Response size limit reached; translation is incomplete."
+    zh-CN: "响应超过安全大小限制，译文不完整。"

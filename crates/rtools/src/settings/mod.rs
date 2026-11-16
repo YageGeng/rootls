@@ -1,7 +1,10 @@
 //! User preferences persisted to `settings.toml` (spec §4.6, §4.7), and the
 //! window that edits them.
 
+mod translate;
 pub mod window;
+
+use crate::plugins::translate::core::TranslateSettings;
 
 use std::fmt;
 use std::fs;
@@ -46,6 +49,8 @@ pub struct Settings {
     pub json: JsonSettings,
     /// The `[diff]` table, changed only from the diff plugin's compare view.
     pub diff: DiffSettings,
+    /// Translation connection and defaults; credentials never enter this table.
+    pub translate: TranslateSettings,
 }
 
 /// Options of the JSON editor plugin.
@@ -123,6 +128,7 @@ impl Default for Settings {
             dark_theme: "Default Dark".into(),
             json: JsonSettings::default(),
             diff: DiffSettings::default(),
+            translate: TranslateSettings::default(),
         }
     }
 }
@@ -259,6 +265,8 @@ impl From<&str> for Language {
 pub struct SettingsStore {
     pub file: SettingsFile,
     pub settings: Settings,
+    /// In-memory notification generation for successful platform credential changes.
+    pub credential_revision: u64,
 }
 
 impl Global for SettingsStore {}
@@ -275,7 +283,11 @@ impl SettingsStore {
                 .join("settings.toml"),
         );
         let settings = file.load();
-        cx.set_global(Self { file, settings });
+        cx.set_global(Self {
+            file,
+            settings,
+            credential_revision: 0,
+        });
         Self::apply(cx, None);
     }
 
@@ -301,6 +313,20 @@ impl SettingsStore {
         let settings = store.file.load();
         let before = std::mem::replace(&mut store.settings, settings);
         Self::apply(cx, Some(&before));
+    }
+
+    /// Persists translation preferences before publishing them to existing views.
+    pub fn save_translation(cx: &mut App, translate: TranslateSettings) -> io::Result<()> {
+        let store = cx.global_mut::<Self>();
+        let mut next = store.settings.clone();
+        next.translate = translate;
+        if let Err(error) = store.file.save(&next) {
+            tracing::warn!("saving translation preferences failed: {}", error);
+            return Err(error);
+        }
+        store.settings = next;
+        tracing::info!("translation connection preferences saved");
+        Ok(())
     }
 
     /// Changes the settings, applies them to every window right away and

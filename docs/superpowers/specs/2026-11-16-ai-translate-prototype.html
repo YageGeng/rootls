@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>rtools · AI 翻译交互提案</title>
+<style>
+  :root { color-scheme: light; --canvas:#f2f3f5; --surface:#fff; --subtle:#f8f9fa; --text:#22252a; --muted:#737880; --line:#dfe2e6; --accent:#2563eb; --on-accent:#fff; --danger:#bd3036; --focus:#90b4ff; --radius:6px; --shadow:0 18px 60px #17223314; }
+  :root[data-theme=dark] { color-scheme:dark; --canvas:#181a20; --surface:#22252c; --subtle:#282c34; --text:#e8eaf0; --muted:#a3a9b5; --line:#3a3e48; --accent:#83aaff; --on-accent:#17223a; --danger:#ff9a9f; --focus:#b2caff; --shadow:0 18px 60px #0003; }
+  * { box-sizing:border-box; } [hidden] { display:none!important; }
+  body { margin:0; padding:32px 24px; background:var(--canvas); color:var(--text); font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  button,input,select,textarea { font:inherit; color:inherit; }
+  button,select,input { border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); min-height:32px; padding:5px 10px; }
+  button { cursor:default; white-space:nowrap; } button:hover:not(:disabled) { background:var(--subtle); } button:disabled { opacity:.45; }
+  :focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+  h1,h2,h3,p { margin:0; } h1 { font-size:21px; font-weight:600; } h2 { font-size:18px; } h3 { font-size:14px; font-weight:600; }
+  .review { max-width:960px; margin:0 auto 20px; } .review p { color:var(--muted); margin:6px 0 16px; }
+  .review-tools,.row,.actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .review-tools label { display:flex; align-items:center; gap:6px; margin-right:12px; }
+  .window { max-width:800px; height:600px; margin:auto; background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); display:flex; flex-direction:column; }
+  .window.wide { max-width:960px; height:680px; }
+  .header { display:flex; align-items:center; gap:12px; min-height:48px; border-bottom:1px solid var(--line); padding:8px 16px; }
+  .header strong { font-size:16px; font-weight:600; } .spacer { flex:1; }
+  .ghost { border-color:transparent; background:transparent; }
+  .primary { background:var(--accent); color:var(--on-accent); border-color:var(--accent); font-weight:500; }
+  .primary:hover:not(:disabled) { background:var(--accent); filter:brightness(.96); }
+  .modebar { display:flex; gap:18px; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .modebar label { display:flex; align-items:center; gap:8px; }
+  .body { flex:1; min-height:0; display:flex; flex-direction:column; }
+  .body.columns { flex-direction:row; } .body.columns .pane { flex:1; }
+  .pane { min-height:0; min-width:0; display:flex; flex-direction:column; }
+  .source-pane { flex:2; border-bottom:1px solid var(--line); } .result-pane { flex:3; }
+  .columns .source-pane { border-bottom:0; border-right:1px solid var(--line); }
+  .pane-head { display:flex; align-items:center; gap:8px; padding:9px 16px 3px; min-height:36px; }
+  .pane-head span,.muted,.count { color:var(--muted); font-size:12px; } .count { text-align:right; padding:2px 16px 7px; }
+  textarea { width:100%; flex:1; min-height:0; resize:none; padding:8px 16px; background:transparent; border:0; line-height:1.7; border-radius:0; }
+  textarea:focus-visible { outline-offset:-3px; }
+  .result { padding:8px 16px; flex:1; min-height:0; overflow:auto; white-space:pre-wrap; line-height:1.75; overflow-wrap:anywhere; }
+  .result.empty { color:var(--muted); display:flex; align-items:center; justify-content:center; text-align:center; }
+  .status { padding:6px 16px 10px; font-size:12px; color:var(--muted); min-height:30px; display:flex; align-items:center; gap:8px; }
+  .status.error { color:var(--danger); }
+  .footer { border-top:1px solid var(--line); padding:9px 12px; display:flex; align-items:center; gap:8px; min-height:52px; }
+  .provider { font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  kbd { font:12px -apple-system,sans-serif; opacity:.75; padding-left:6px; }
+  dialog { width:min(840px,calc(100vw - 32px)); max-height:calc(100vh - 48px); padding:0; border:1px solid var(--line); border-radius:12px; color:var(--text); background:var(--surface); box-shadow:var(--shadow); }
+  dialog::backdrop { background:#0005; } .settings-body { display:flex; min-height:440px; }
+  aside { flex:0 0 150px; background:var(--subtle); border-right:1px solid var(--line); padding:16px 10px; }
+  aside p { padding:7px 10px; color:var(--muted); } aside .selected { background:var(--surface); border-radius:var(--radius); color:var(--text); font-weight:500; }
+  .form { padding:22px 24px; flex:1; min-width:0; } .form h3 { margin-bottom:12px; }
+  .form section+section { border-top:1px solid var(--line); margin-top:22px; padding-top:18px; }
+  .field { display:block; margin-bottom:12px; } .field input { display:block; width:100%; margin-top:5px; }
+  .help { color:var(--muted); font-size:12px; margin-top:5px; }
+  .actions { justify-content:flex-end; } .secret-row { display:flex; align-items:center; gap:8px; } .secret-row input { flex:1; min-width:0; }
+  #config-status { margin-top:10px; min-height:20px; }
+  .notes { max-width:800px; margin:18px auto 0; color:var(--muted); font-size:12px; }
+  @media(max-width:680px) { body { padding:16px 10px; } .window,.window.wide { height:640px; } .provider { display:none; } aside { display:none; } .form { padding:18px; } .body.columns { flex-direction:column; } .columns .source-pane { border-right:0; border-bottom:1px solid var(--line); } }
+</style>
+<body>
+<header class="review">
+  <h1>rtools · AI 翻译</h1>
+  <p>交互提案。仅播放固定示例译文，不调用 API、不保存数据；请勿输入真实 Key。</p>
+  <div class="review-tools">
+    <label>示例 <select id="sample"><option value="tech">技术文档</option><option value="daily">日常内容</option><option value="empty">空白输入</option><option value="missing">未配置 Key</option><option value="error">连接中断</option></select></label>
+    <label>布局 <select id="layout"><option value="stack">上下分区 · 推荐</option><option value="columns">左右分栏 · 对比</option></select></label>
+    <button id="theme">切换深色</button>
+  </div>
+</header>
+<main class="window" id="window" aria-label="AI 翻译工作区">
+  <div class="header"><span aria-hidden="true">←</span><strong>AI 翻译</strong><span class="spacer"></span><button id="detach" class="ghost">模拟分离窗口</button></div>
+  <div class="modebar">
+    <label for="direction">方向 <select id="direction"><option value="auto">自动：英 → 中</option><option value="en-zh">英文 → 中文</option><option value="zh-en">中文 → 英文</option></select></label>
+    <label for="scenario">场景 <select id="scenario"><option value="general">通用</option><option value="technical" selected>技术</option></select></label>
+  </div>
+  <div class="body" id="panes">
+    <section class="pane source-pane" aria-label="原文区域">
+      <div class="pane-head"><h3><label for="source">原文</label></h3><span class="spacer"></span><button id="clear" class="ghost">清空</button></div>
+      <textarea id="source" placeholder="输入或粘贴中文、英文…" spellcheck="false">## Retry policy
+
+Retry transient failures with exponential backoff. Do not retry authentication errors.
+
+Set &#96;DEEPSEEK_API_KEY&#96; before starting the application.</textarea>
+      <div class="count" id="count"></div>
+    </section>
+    <section class="pane result-pane" aria-label="译文区域">
+      <div class="pane-head"><h3>译文</h3><span id="target">中文</span></div>
+      <div class="result empty" id="output" tabindex="0" aria-label="译文内容">准备好后，点击翻译或按 ⌘ Enter</div>
+      <div class="status" id="status" role="status"><span id="status-text">保留段落、Markdown 和代码标识符</span><button id="configure-inline" class="ghost" hidden>配置 DeepSeek…</button></div>
+    </section>
+  </div>
+  <div class="footer"><span class="provider" id="provider">DeepSeek · deepseek-flash</span><button id="settings" class="ghost">设置…</button><span class="spacer"></span><button id="copy" disabled>复制译文</button><button id="translate" class="primary">翻译 <kbd>⌘↵</kbd></button></div>
+</main>
+<p class="notes">可切换样例、布局和主题，体验流式播放、停止、修改原文、错误恢复与配置入口。设置页以弹层展示信息结构；实际产品复用独立设置窗口。原型未模拟真实语言识别、拖动分隔条或系统凭据存储。</p>
+<dialog id="config" aria-labelledby="config-title">
+  <div class="header"><h2 id="config-title">设置</h2><span class="spacer"></span><button id="close-config" class="ghost" aria-label="关闭设置">关闭</button></div>
+  <div class="settings-body">
+    <aside aria-label="设置侧栏"><p>外观</p><p>语言</p><p>JSON 编辑器</p><p class="selected">AI 翻译</p></aside>
+    <div class="form">
+      <section>
+        <h3>连接</h3>
+        <label class="field">接口地址<input id="endpoint" type="url" value="https://api.deepseek.com/chat/completions"><span class="help">完整的 Chat Completions 请求地址，包含路径。</span></label>
+        <label class="field">模型名称<input id="model" value="deepseek-flash"></label>
+        <div class="actions"><button id="defaults" class="ghost">恢复官方默认</button><button id="save-connection">保存连接</button></div>
+      </section>
+      <section>
+        <h3>凭据</h3>
+        <p class="help" id="key-source">当前来源：环境变量 DEEPSEEK_API_KEY（模拟）</p>
+        <label class="field" for="key">API Key</label>
+        <div class="secret-row"><input id="key" type="password" autocomplete="off" placeholder="原型：只输入示例文字"><button id="show-key" aria-pressed="false">显示</button></div>
+        <p class="help">产品将保存到系统凭据存储。已保存 Key 优先；此原型不保存任何 Key。</p>
+        <div class="actions" style="margin-top:10px"><button id="remove-key" class="ghost" disabled>移除已保存 Key</button><button id="save-key">保存 Key</button></div>
+      </section>
+      <section>
+        <div class="row"><button id="test">测试连接</button><span class="help">原型不联网。实际测试使用固定短文本，会产生少量调用费用。</span></div>
+        <p id="config-status" class="help" role="status">尚未测试</p>
+      </section>
+    </div>
+  </div>
+</dialog>
+<script>
+  const source = document.querySelector('#source'), output = document.querySelector('#output');
+  const direction = document.querySelector('#direction'), scenario = document.querySelector('#scenario');
+  const translate = document.querySelector('#translate'), copy = document.querySelector('#copy');
+  const config = document.querySelector('#config'), configStatus = document.querySelector('#config-status');
+  const endpoint = document.querySelector('#endpoint'), model = document.querySelector('#model');
+  const key = document.querySelector('#key'), statusText = document.querySelector('#status-text');
+  const defaultEndpoint = 'https://api.deepseek.com/chat/completions', defaultModel = 'deepseek-flash';
+  const techSource = source.value, dailySource = '这周工作有点忙，我们把晚饭改到周六可以吗？';
+  const tick = String.fromCharCode(96);
+  const techResult = '## 重试策略\n\n对暂时性故障采用指数退避重试。不要重试身份验证错误。\n\n启动应用程序前，设置 ' + tick + 'DEEPSEEK_API_KEY' + tick + '。';
+  const dailyResult = 'Work has been a bit busy this week. Could we move dinner to Saturday?';
+  let state = 'idle', result = '', task = 0, timer, environmentKey = true, savedKey = false;
+  let connection = { endpoint:defaultEndpoint, model:defaultModel };
+
+  // This mock detector demonstrates direction labels, not production language detection.
+  function resolvedDirection() {
+    if (direction.value !== 'auto') return direction.value;
+    return /[\u3400-\u9fff]/.test(source.value) ? 'zh-en' : 'en-zh';
+  }
+
+  // Keep action availability, output labels and nearby feedback in one place.
+  function render() {
+    const running = state === 'connecting' || state === 'streaming';
+    const toEnglish = resolvedDirection() === 'zh-en';
+    direction.options[0].textContent = '自动：' + (toEnglish ? '中 → 英' : '英 → 中');
+    document.querySelector('#target').textContent = toEnglish ? '英文' : '中文';
+    document.querySelector('#count').textContent = Array.from(source.value).length.toLocaleString() + ' / 20,000';
+    output.textContent = result || (environmentKey || savedKey ? '准备好后，点击翻译或按 ⌘ Enter' : '配置 DeepSeek 后即可翻译。原文会保留。');
+    output.classList.toggle('empty', !result);
+    translate.textContent = running ? '停止' : (state === 'error' ? '重试  ⌘↵' : '翻译  ⌘↵');
+    translate.disabled = !source.value.trim() || Array.from(source.value).length > 20000 || !(environmentKey || savedKey);
+    copy.disabled = !result;
+    copy.textContent = state === 'stale' || state === 'connecting' ? '复制旧译文' : (['error','stopped','streaming'].includes(state) ? '复制已生成文本' : '复制译文');
+    document.querySelector('#status').classList.toggle('error', state === 'error');
+    document.querySelector('#configure-inline').hidden = environmentKey || savedKey;
+    if (!(environmentKey || savedKey)) statusText.textContent = '未配置 API Key';
+    if (Array.from(source.value).length > 20000) statusText.textContent = '原文超过 20,000 字符，请分段翻译';
+    document.querySelector('#provider').textContent = 'DeepSeek · ' + connection.model;
+    document.querySelector('#key-source').textContent = '当前来源：' + (savedKey ? '已保存 Key（模拟）' : environmentKey ? '环境变量 DEEPSEEK_API_KEY（模拟）' : '未配置');
+    document.querySelector('#remove-key').disabled = !savedKey;
+    updateConfigDraft();
+  }
+
+  // Keep credential saves and connection tests tied to the committed endpoint.
+  function updateConfigDraft() {
+    const dirty = endpoint.value.trim() !== connection.endpoint || model.value.trim() !== connection.model;
+    document.querySelector('#save-connection').disabled = !dirty;
+    document.querySelector('#test').disabled = dirty || !(environmentKey || savedKey);
+    document.querySelector('#save-key').disabled = dirty || !key.value.trim();
+  }
+
+  // Cancel pending sample frames before changing the request or input.
+  function cancelPlayback() { task += 1; clearTimeout(timer); }
+
+  // Preserve the previous result and mark it as outdated after input changes.
+  function markChanged() {
+    cancelPlayback(); state = result ? 'stale' : 'idle';
+    statusText.textContent = result ? '内容已修改，请重新翻译' : '仅在点击翻译后发送';
+    render();
+  }
+
+  // Play fixed sample text so reviewers can inspect streaming and cancellation.
+  function runTranslation() {
+    if (translate.disabled) return;
+    if (state === 'connecting' || state === 'streaming') {
+      cancelPlayback(); state = 'stopped'; statusText.textContent = '已停止，译文不完整'; render(); return;
+    }
+    cancelPlayback(); const request = task;
+    const text = source.value === techSource && resolvedDirection() === 'en-zh' ? techResult :
+      source.value === dailySource && resolvedDirection() === 'zh-en' ? dailyResult :
+      '这是交互示意，不会调用模型。\n\n实际产品会把原文翻译成' + (resolvedDirection() === 'zh-en' ? '英文。' : '中文。');
+    state = 'connecting'; statusText.textContent = '正在连接…（示意）'; render();
+    let offset = 0;
+    // Append a short batch while ignoring callbacks from a cancelled playback.
+    const append = () => {
+      if (request !== task) return;
+      offset = Math.min(offset + 4, text.length);
+      result = text.slice(0, offset);
+      state = offset === text.length ? 'complete' : 'streaming';
+      statusText.textContent = state === 'complete' ? '示例播放完成 · 未调用 API' : '正在翻译…（示意）';
+      render();
+      if (state === 'streaming') timer = setTimeout(append, 70);
+    };
+    timer = setTimeout(append, 450);
+  }
+
+  // Show the connection page without discarding the translation session.
+  function openSettings() {
+    endpoint.value = connection.endpoint; model.value = connection.model;
+    updateConfigDraft(); config.showModal(); endpoint.focus();
+  }
+
+  source.addEventListener('input', markChanged);
+  direction.addEventListener('change', markChanged);
+  scenario.addEventListener('change', markChanged);
+  translate.addEventListener('click', runTranslation);
+  document.querySelector('#clear').addEventListener('click', () => {
+    cancelPlayback(); source.value = ''; result = ''; state = 'idle';
+    statusText.textContent = '输入或粘贴中文、英文'; render(); source.focus();
+  });
+  document.querySelector('#sample').addEventListener('change', event => {
+    cancelPlayback(); result = ''; state = 'idle'; savedKey = false;
+    const sample = event.target.value;
+    environmentKey = sample !== 'missing'; direction.value = 'auto';
+    source.value = sample === 'daily' ? dailySource : sample === 'empty' ? '' : techSource;
+    scenario.value = sample === 'daily' ? 'general' : 'technical';
+    statusText.textContent = '仅在点击翻译后发送';
+    if (sample === 'error') { result = '## 重试策略\n\n对暂时性故障采用指数退避重试。'; state = 'error'; statusText.textContent = '连接中断，译文不完整。可以重新翻译。'; }
+    render();
+  });
+  document.querySelector('#layout').addEventListener('change', event => document.querySelector('#panes').classList.toggle('columns', event.target.value === 'columns'));
+  document.querySelector('#theme').addEventListener('click', event => {
+    const dark = document.documentElement.dataset.theme !== 'dark';
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'; event.target.textContent = dark ? '切换浅色' : '切换深色';
+  });
+  document.querySelector('#detach').addEventListener('click', event => {
+    const wide = document.querySelector('#window').classList.toggle('wide'); event.target.textContent = wide ? '恢复启动器尺寸' : '模拟分离窗口';
+  });
+  document.querySelector('#settings').addEventListener('click', openSettings);
+  document.querySelector('#configure-inline').addEventListener('click', openSettings);
+  document.querySelector('#close-config').addEventListener('click', () => config.close());
+  config.addEventListener('close', () => { key.value = ''; key.type = 'password'; document.querySelector('#show-key').textContent = '显示'; document.querySelector('#show-key').setAttribute('aria-pressed','false'); document.querySelector('#settings').focus(); });
+  for (const field of [endpoint,model]) field.addEventListener('input', () => { configStatus.textContent = '连接已修改，请先保存连接再测试或保存 Key'; updateConfigDraft(); });
+  key.addEventListener('input', updateConfigDraft);
+  document.querySelector('#defaults').addEventListener('click', () => { endpoint.value = defaultEndpoint; model.value = defaultModel; configStatus.textContent = '已填入官方默认值'; updateConfigDraft(); });
+  document.querySelector('#save-connection').addEventListener('click', () => {
+    try {
+      const url = new URL(endpoint.value.trim());
+      const loopback = ['localhost','127.0.0.1','[::1]'].includes(url.hostname);
+      if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) || url.username || url.password || !model.value.trim()) throw new Error('invalid');
+      if (connection.endpoint !== url.href) savedKey = false;
+      connection = { endpoint:url.href, model:model.value.trim() };
+      configStatus.textContent = '示例连接已更新，尚未测试；未写入真实设置'; render();
+    } catch { configStatus.textContent = '请输入有效的完整 HTTPS 地址和模型名称'; }
+  });
+  document.querySelector('#show-key').addEventListener('click', event => {
+    const visible = key.type === 'password'; key.type = visible ? 'text' : 'password';
+    event.target.textContent = visible ? '隐藏' : '显示'; event.target.setAttribute('aria-pressed', String(visible));
+  });
+  document.querySelector('#save-key').addEventListener('click', () => {
+    if (!key.value.trim()) { configStatus.textContent = '请先输入示例文字；不要使用真实 Key'; return; }
+    key.value = ''; savedKey = true; configStatus.textContent = '已模拟保存 Key；未保存输入内容'; render();
+  });
+  document.querySelector('#remove-key').addEventListener('click', () => { savedKey = false; configStatus.textContent = '已移除模拟 Key，重新检查凭据来源'; render(); });
+  document.querySelector('#test').addEventListener('click', () => {
+    configStatus.textContent = environmentKey || savedKey ? '示意：连接验证通过。原型没有发出网络请求。' : '请先配置 Key';
+  });
+  copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(result); statusText.textContent = '已复制示例译文'; }
+    catch { statusText.textContent = '浏览器未允许复制，可选中译文后复制'; }
+  });
+  document.addEventListener('keydown', event => {
+    if (event.isComposing || config.open) return;
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); runTranslation(); }
+    if (event.key === 'Escape' && (state === 'streaming' || state === 'connecting')) { event.preventDefault(); runTranslation(); }
+  });
+  render();
+</script>
+</body>
+</html>

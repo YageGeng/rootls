@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>rtools · 翻译界面设计 V2</title>
+<style>
+:root{color-scheme:light;--canvas:#eceef1;--surface:#fff;--secondary:#f6f7f9;--hover:#eceff3;--text:#242931;--muted:#747d89;--line:#dce0e5;--accent:#3188a4;--accent-text:#fff;--focus:#5b9ac6;--error:#b54848;--shadow:0 16px 60px #1b263819}
+:root[data-theme=dark]{color-scheme:dark;--canvas:#16181d;--surface:#23262d;--secondary:#282c33;--hover:#343942;--text:#e7eaf0;--muted:#a3acba;--line:#3b414c;--accent:#76bcd0;--accent-text:#15262b;--focus:#90bfdc;--error:#ed9c9c;--shadow:0 16px 60px #0004}
+*{box-sizing:border-box} [hidden]{display:none!important} body{margin:0;background:var(--canvas);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;padding:28px 20px} button,select,textarea{font:inherit;color:inherit} button{cursor:default} button,select{border:0;background:transparent;border-radius:6px} button:not(:disabled):hover,select:hover{background:var(--hover)} button:disabled{opacity:.4} :focus-visible{outline:2px solid var(--focus);outline-offset:2px} svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none} h1,p{margin:0} h1{font-size:18px;font-weight:600}.review{max-width:800px;margin:0 auto 18px}.review p{margin:6px 0 14px;color:var(--muted);font-size:13px}.review-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.review-controls select,.review-controls button{padding:5px 10px;background:var(--surface);border:1px solid var(--line)}.review-controls label{display:flex;gap:8px;align-items:center;font-size:12px}.window{width:100%;max-width:800px;height:600px;min-height:520px;margin:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column}.window.narrow{max-width:640px}.titlebar{height:40px;flex:none;border-bottom:1px solid var(--line);padding:0 12px;display:flex;align-items:center;gap:12px}.titlebar strong{font-size:14px;font-weight:600}.titlebar>.muted{display:flex}.spacer{flex:1;min-width:0}.icon{width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--muted)}.muted{color:var(--muted)}.workspace{flex:1;min-height:0;margin:12px;border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column}.pane{min-height:0;display:flex;flex-direction:column}.source-pane{flex:0 0 43%}.result-pane{flex:1;background:var(--secondary);border-radius:0 0 9px 9px}.pane-header{display:flex;align-items:center;gap:8px;padding:4px 16px;flex:none;min-height:40px;border-bottom:1px solid var(--line);background:var(--secondary)}.source-pane .pane-header{border-radius:9px 9px 0 0}
+/* Center the swap action independently of the widths of the side controls. */
+.result-pane .pane-header{position:relative}.language-label{font-size:12px;color:var(--muted);white-space:nowrap}.language-menu{display:inline-flex;position:relative;flex:none}.language{appearance:none;-webkit-appearance:none;width:auto;max-width:13em;font-size:13px;font-weight:500;padding:4px 28px 4px 10px;min-height:30px;border:1px solid var(--line);border-radius:6px;background:var(--surface);cursor:default}.language-menu .chevron{position:absolute;right:9px;top:50%;transform:translateY(-50%);width:12px;height:12px;pointer-events:none;color:var(--muted)}.language:hover{border-color:var(--muted);background:var(--hover)}.language:focus-visible{outline:2px solid var(--focus);outline-offset:2px}.detected,.state-label{font-size:12px;color:var(--muted)}.source-meta{display:flex;align-items:center;gap:8px;flex:none;min-height:20px;padding:0 16px 4px;font-size:11px;line-height:16px;color:var(--muted)}.count{font-variant-numeric:tabular-nums}.editor{width:100%;flex:1;min-height:0;resize:none;border:0;background:transparent;border-radius:0;padding:8px 16px 10px;font-size:14px;line-height:1.75;color:var(--text)}.editor::placeholder{color:var(--muted)}/* Text editing uses the caret and selection instead of a full focus frame. */
+.editor:focus-visible{outline:none}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}.divider{height:1px;background:var(--line);position:relative;flex:none;cursor:row-resize;touch-action:none}.swap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:28px;height:28px;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--muted);display:flex;align-items:center;justify-content:center;z-index:1}.feedback{font-size:12px;color:var(--muted);padding:2px 16px 12px;min-height:30px;display:flex;gap:8px;align-items:center}.feedback.error{color:var(--error)}.inline-action{font-size:12px;color:var(--text);padding:3px 6px}.footer{height:44px;flex:none;display:flex;gap:12px;align-items:center;border-top:1px solid var(--line);padding:6px 12px}.segments{display:inline-flex;padding:2px;background:var(--secondary);border:1px solid var(--line);border-radius:7px;gap:2px}.segments button{font-size:12px;line-height:20px;padding:1px 12px;border-radius:4px}.segments button[aria-pressed=true]{background:var(--surface);color:var(--text);box-shadow:0 1px 2px #00000012}.segments button[aria-pressed=false]{color:var(--muted)}.submit{height:28px;min-width:72px;padding:0 12px;background:var(--accent);color:var(--accent-text);font-size:13px;display:flex;gap:12px;align-items:center;justify-content:center}.submit:not(:disabled):hover{background:var(--accent);filter:brightness(.95)}.submit kbd{font:12px -apple-system,sans-serif;opacity:.8}.notes{max-width:800px;margin:16px auto 0;color:var(--muted);font-size:12px;line-height:1.8}.notes strong{color:var(--text);font-weight:500}.notes ul{margin:5px 0;padding-left:18px}dialog{padding:0;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--text);width:min(480px,calc(100vw - 32px));box-shadow:var(--shadow)}dialog::backdrop{background:#0004}.config-header{display:flex;align-items:center;border-bottom:1px solid var(--line);padding:12px 16px}.config-body{padding:18px 20px}.config-body p{color:var(--muted);font-size:12px}.config-body dl{margin:16px 0;display:grid;grid-template-columns:72px 1fr;gap:12px;font-size:13px}.config-body dt{color:var(--muted)}.config-body dd{margin:0;overflow-wrap:anywhere}.config-body code{font:12px ui-monospace,monospace}.footnote{margin-top:16px!important;padding-top:12px;border-top:1px solid var(--line)}@media(max-width:680px){body{padding:16px 10px}.detected{display:none}.source-meta .hint{max-width:65%;font-size:10px}.footer{gap:8px}.window{height:600px}.segments button{padding-inline:10px}}
+</style>
+<body>
+<svg style="display:none" aria-hidden="true"><defs>
+<symbol id="back" viewBox="0 0 24 24"><path d="m12 5-7 7 7 7M5 12h14"/></symbol>
+<symbol id="languages" viewBox="0 0 24 24"><path d="m5 8 6 6m-7 0 6-6 2-5H2m5-2v2m7 17 4-11 4 11m-6-4h4"/></symbol>
+<symbol id="window" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 8h18m-14-4v4m4-4v4"/></symbol>
+<symbol id="close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+<symbol id="swap" viewBox="0 0 24 24"><path d="M8 19V5m-4 4 4-4 4 4m4-4v14m-4-4 4 4 4-4"/></symbol>
+<symbol id="chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 5V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h1"/></symbol>
+<symbol id="settings" viewBox="0 0 24 24"><path d="m9 3-1 3-3 1-2 3 2 2-1 3 3 2 1 3h4l1-3 3-1 2-3-2-2 1-3-3-2-1-3z"/><circle cx="10.5" cy="11.5" r="3"/></symbol>
+</defs></svg>
+<header class="review"><h1>翻译工作区 · 设计 V2</h1><p>聚焦语言、文本与翻译动作。可切换状态、深浅色和窗口宽度；固定样例，不连接模型。</p><div class="review-controls"><label>状态<select id="preview"><option value="complete">翻译完成</option><option value="empty">空白</option><option value="stale">原文已修改</option><option value="error">连接失败</option><option value="missing">未配置 Key</option></select></label><button id="theme">深色预览</button><button id="width">640 px 预览</button></div></header>
+<main class="window" aria-label="AI 翻译设计预览">
+<header class="titlebar"><button class="icon" aria-label="返回" title="返回"><svg><use href="#back"/></svg></button><span class="muted"><svg><use href="#languages"/></svg></span><strong>AI 翻译</strong><span class="spacer"></span><button id="detach" class="icon" aria-label="切换窗口宽度" title="分离窗口（原型仅切换宽度）"><svg><use href="#window"/></svg></button></header>
+<div class="workspace">
+<section class="pane source-pane" aria-label="原文区域"><header class="pane-header"><label class="language-label" for="source-language">原文语言</label><span class="language-menu"><select id="source-language" class="language"><option value="auto">自动检测</option><option value="en">英语</option><option value="zh">简体中文</option></select><svg class="chevron" aria-hidden="true"><use href="#chevron"/></svg></span><span id="detected" class="detected">已识别英语</span><span class="spacer"></span><button id="copy-source" class="icon" aria-label="复制原文" title="复制原文"><svg><use href="#copy"/></svg></button><button id="clear" class="icon" aria-label="清空原文与译文" title="清空"><svg><use href="#close"/></svg></button></header><textarea id="source" class="editor" aria-label="原文" placeholder="输入或粘贴要翻译的文本…" spellcheck="false"></textarea><div class="source-meta"><span class="hint">Enter 翻译 · Shift+Enter 换行</span><span class="spacer"></span><span id="count" class="count"></span></div></section>
+<div class="divider" title="拖动调整分区"></div>
+<section class="pane result-pane" aria-label="译文区域"><header class="pane-header"><label class="language-label" for="target-language">译文语言</label><span class="language-menu"><select id="target-language" class="language"><option value="zh">简体中文</option><option value="en">英语</option></select><svg class="chevron" aria-hidden="true"><use href="#chevron"/></svg></span><span id="state-label" class="state-label" aria-live="polite"></span><button id="exchange" class="swap" aria-label="交换原文与译文" title="交换原文与译文"><svg><use href="#swap"/></svg></button><span class="spacer"></span><button id="copy-output" class="icon" aria-label="复制译文" title="复制译文 · ⌘⇧C"><svg><use href="#copy"/></svg></button></header><textarea id="output" class="editor" aria-label="译文" placeholder="译文将在这里显示" readonly></textarea><div class="feedback" id="feedback" hidden><span id="feedback-text"></span><button id="configure" class="inline-action" hidden>配置 DeepSeek…</button></div></section>
+</div>
+<footer class="footer"><button id="settings-button" class="icon" aria-label="设置" title="设置"><svg><use href="#settings"/></svg></button><div class="segments" role="group" aria-label="翻译风格"><button data-style="general" aria-pressed="true">通用</button><button data-style="technical" aria-pressed="false">技术</button></div><span class="spacer"></span><button id="submit" class="submit"><span id="submit-label">翻译</span><kbd aria-hidden="true">↵</kbd></button></footer>
+</main>
+<div class="notes"><strong>这版的取舍</strong><ul><li>语言选择置于独立控制栏：明确的语言标签、有边框的菜单按钮，以及与正文分开的细线。</li><li>原文区提供复制和清空，译文区提供复制；两侧使用同一种图标按钮。</li><li>底栏只放设置、翻译风格与主操作。完整模型名、endpoint 和 Key 来源在设置中查看。</li><li>“待重新翻译”只出现一次，靠近目标语言；正常完成不额外增加一行提示。</li></ul></div>
+<span id="copy-feedback" class="sr-only" role="status" aria-live="polite"></span>
+<dialog id="settings-dialog" aria-labelledby="config-title"><header class="config-header"><strong id="config-title">AI 翻译设置</strong><span class="spacer"></span><button id="close-settings" class="icon" aria-label="关闭设置"><svg><use href="#close"/></svg></button></header><div class="config-body"><p>此处仅预览信息层级。实际应用继续使用独立设置窗口。</p><dl><dt>服务</dt><dd>DeepSeek</dd><dt>模型</dt><dd><code>deepseek-flash</code></dd><dt>接口</dt><dd><code>https://api.deepseek.com/chat/completions</code></dd><dt>Key 来源</dt><dd>系统凭据存储（示意）</dd></dl><p class="footnote">模型名在这里完整展示，按需编辑；翻译工作区不展示被截断的配置名称。本原型不读取、保存或输入真实 Key。</p></div></dialog>
+<script>
+const $ = id => document.getElementById(id);
+const source = $('source'), output = $('output'), sourceLanguage = $('source-language'), targetLanguage = $('target-language');
+const english = 'Use exponential backoff when retrying a request.\nKeep API names and code snippets unchanged.';
+const chinese = '重试请求时使用指数退避。\n保留 API 名称和代码片段。';
+let state = 'complete', timer, style = 'general';
+// Derive mock direction locally; production keeps its existing detector.
+function resolveLanguage() { return sourceLanguage.value === 'auto' ? (/[\u3400-\u9fff]/.test(source.value) ? 'zh' : 'en') : sourceLanguage.value; }
+// Keep controls and feedback aligned with the visible prototype state.
+function render() {
+  const hasText = !!source.value.trim(), running = state === 'running';
+  $('count').textContent = `${Array.from(source.value).length} / 20,000`;
+  $('detected').textContent = sourceLanguage.value === 'auto' && hasText ? (resolveLanguage() === 'en' ? '已识别英语' : '已识别中文') : '';
+  $('state-label').textContent = ({stale:'待重新翻译', running:'正在翻译', stopped:'未完成'})[state] || '';
+  $('feedback').hidden = !['error','missing'].includes(state);
+  $('feedback').classList.toggle('error',state === 'error');
+  $('feedback-text').textContent = state === 'error' ? '连接中断，已保留部分译文。可以重试。' : '尚未配置 DeepSeek';
+  $('configure').hidden = state !== 'missing';
+  $('submit-label').textContent = running ? '停止' : state === 'error' ? '重试' : '翻译';
+  $('submit').disabled = !running && (!hasText || state === 'missing');
+  $('copy-source').disabled = !source.value;
+  $('copy-output').disabled = !output.value;
+  $('exchange').disabled = !source.value && !output.value;
+}
+// Editing cancels playback and marks one retained result as stale.
+function invalidate() { clearInterval(timer); state = output.value ? 'stale' : 'empty'; render(); }
+// Play fixed sample text only, with no request, key or external service.
+function translate() {
+  if (state === 'running') { clearInterval(timer); state = 'stopped'; render(); return; }
+  if (!source.value.trim() || state === 'missing') return;
+  const result = targetLanguage.value === 'zh' ? chinese : english;
+  output.value = ''; state = 'running'; render();
+  let offset = 0;
+  timer = setInterval(() => { output.value = result.slice(0, ++offset); if (offset === result.length) { clearInterval(timer); state = 'complete'; } render(); }, 28);
+}
+// Each preview is isolated from persistent application preferences.
+function preview() {
+  clearInterval(timer); state = $('preview').value;
+  source.value = state === 'empty' ? '' : english;
+  output.value = ['complete','stale','error'].includes(state) ? chinese : '';
+  sourceLanguage.value = 'auto'; targetLanguage.value = 'zh'; render();
+}
+source.addEventListener('input', () => { if(sourceLanguage.value === 'auto') targetLanguage.value = resolveLanguage() === 'en' ? 'zh' : 'en'; invalidate(); });
+source.addEventListener('keydown', e => { if(e.key === 'Enter' && !e.shiftKey && !e.isComposing) {e.preventDefault(); translate();} });
+sourceLanguage.addEventListener('change', () => {targetLanguage.value = resolveLanguage() === 'en' ? 'zh' : 'en'; invalidate();});
+targetLanguage.addEventListener('change', invalidate);
+$('submit').addEventListener('click', translate);
+$('clear').addEventListener('click', () => {clearInterval(timer); source.value = output.value = ''; state='empty'; render(); source.focus();});
+$('exchange').addEventListener('click', () => {clearInterval(timer); [source.value,output.value] = [output.value,source.value]; if(sourceLanguage.value === 'auto') targetLanguage.value=resolveLanguage() === 'en' ? 'zh' : 'en'; invalidate();});
+document.querySelectorAll('[data-style]').forEach(button => button.addEventListener('click', () => {style=button.dataset.style; document.querySelectorAll('[data-style]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.style===style))); invalidate();}));
+$('preview').addEventListener('change',preview);
+$('theme').addEventListener('click',()=>{const dark=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=dark?'dark':'light';$('theme').textContent=dark?'浅色预览':'深色预览';});
+// Size controls belong to the review page, not the proposed product toolbar.
+function changeWidth() {const narrow=document.querySelector('.window').classList.toggle('narrow');$('width').textContent=narrow?'800 px 预览':'640 px 预览';}
+$('width').addEventListener('click',changeWidth);$('detach').addEventListener('click',changeWidth);
+$('settings-button').addEventListener('click',()=> $('settings-dialog').showModal());
+$('configure').addEventListener('click',()=> $('settings-dialog').showModal());
+$('close-settings').addEventListener('click',()=> $('settings-dialog').close());
+// Both panes copy only their own current text and announce success or fallback honestly.
+for (const [id, field, label] of [['copy-source', source, '原文'], ['copy-output', output, '译文']]) {
+  $(id).addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(field.value);
+      $('copy-feedback').textContent = `已复制${label}`;
+      $(id).title = `已复制${label}`;
+    } catch {
+      $('copy-feedback').textContent = `无法访问剪贴板，请选中${label}后复制。`;
+      $(id).title = `请选中${label}后复制`;
+    }
+  });
+}
+let dragging=false;
+const divider=document.querySelector('.divider');
+divider.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;dragging=true;divider.setPointerCapture(e.pointerId);});
+divider.addEventListener('pointermove',e=>{if(!dragging)return;const b=document.querySelector('.workspace').getBoundingClientRect();const ratio=Math.max(.3,Math.min(.65,(e.clientY-b.top)/b.height));document.querySelector('.source-pane').style.flexBasis=`${ratio*100}%`;});
+divider.addEventListener('pointerup',()=>{dragging=false;});
+divider.addEventListener('pointercancel',()=>{dragging=false;});
+preview();
+</script>
+</body></html>

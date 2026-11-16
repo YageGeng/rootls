@@ -12,7 +12,7 @@ use crate::cli::ShellCommand;
 use crate::launcher::Launcher;
 use crate::plugin::{PluginRegistry, PluginView};
 use crate::settings::SettingsStore;
-use crate::settings::window::SettingsWindow;
+use crate::settings::window::{Page, SettingsWindow};
 
 /// Wayland application id of every rtools window; matches
 /// `packaging/linux/dev.rtools.rtools.desktop` so the desktop can name and group them.
@@ -44,7 +44,7 @@ pub struct Shell {
     /// When the popup last closed, see [`TOGGLE_AFTER_CLOSE`].
     closed_at: Option<Instant>,
     /// The settings window, while it is open.
-    settings: Option<AnyWindowHandle>,
+    settings: Option<(AnyWindowHandle, WeakEntity<SettingsWindow>)>,
 }
 
 impl Global for Shell {}
@@ -98,11 +98,21 @@ impl Shell {
 
     /// Opens the settings window, or brings it forward when it is already open.
     pub fn open_settings(cx: &mut App) {
+        Self::open_settings_page(None, cx);
+    }
+
+    /// Activates settings and optionally navigates directly to a plugin's page.
+    pub(crate) fn open_settings_page(page: Option<Page>, cx: &mut App) {
         // The macOS launcher is a non-activating panel; normal windows need app activation.
         cx.activate(true);
-        if let Some(handle) = cx.global::<Shell>().settings
+        if let Some((handle, view)) = cx.global::<Shell>().settings.clone()
             && handle
-                .update(cx, |_, window, _| window.activate_window())
+                .update(cx, |_, window, cx| {
+                    if let Some(page) = page {
+                        let _ = view.update(cx, |view, cx| view.open_page(page, window, cx));
+                    }
+                    window.activate_window();
+                })
                 .is_ok()
         {
             tracing::info!("activated the existing settings window");
@@ -112,14 +122,20 @@ impl Shell {
         let opened = open_window(options, cx, |window, cx| {
             SettingsStore::observe_appearance(window);
             window.set_window_title(&t!("settings.window_title"));
-            let view = cx.new(|cx| SettingsWindow::new(window, cx));
+            let view = cx.new(|cx| {
+                let mut view = SettingsWindow::new(window, cx);
+                if let Some(page) = page {
+                    view.open_page(page, window, cx);
+                }
+                view
+            });
             window.focus(&view.focus_handle(cx), cx);
             view
         });
         match opened {
-            Ok((handle, _)) => {
+            Ok((handle, view)) => {
                 tracing::info!("opened the settings window");
-                cx.global_mut::<Shell>().settings = Some(handle);
+                cx.global_mut::<Shell>().settings = Some((handle, view.downgrade()));
             }
             Err(err) => tracing::error!("opening the settings window failed: {}", err),
         }

@@ -18,6 +18,8 @@ icon_assets!(
         RemoveFormatting,
         CodeXml,
         GitCompare,
+        Languages,
+        ArrowUpDown,
         ArrowLeftRight,
         Eraser,
         Space,

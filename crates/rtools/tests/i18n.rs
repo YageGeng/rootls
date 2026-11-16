@@ -1,7 +1,9 @@
 //! The only test in this binary, because the interface language is process-global.
 
 use rtools::plugins::json::core::{InputKind, JsonError, Rewrite};
+use rtools::{plugin::Plugin, plugins::translate::TranslatePlugin};
 
+/// Plugin and error labels follow the selected interface locale.
 #[test]
 fn messages_follow_the_interface_language() {
     rust_i18n::set_locale("zh-CN");
@@ -12,7 +14,20 @@ fn messages_follow_the_interface_language() {
     assert_eq!(JsonError::Timeout.to_string(), "执行超时");
     assert_eq!(InputKind::UrlParams.label(), "URL 参数");
 
+    assert_eq!(
+        rtools::plugins::translate::core::TranslateError::MissingKey.label(),
+        "translate.error_key"
+    );
+    assert_eq!(
+        TranslatePlugin.accepts("hello").unwrap().as_ref(),
+        "翻译这段文本"
+    );
+
     rust_i18n::set_locale("en");
     assert_eq!(JsonError::Timeout.to_string(), "Timed out");
     assert_eq!(InputKind::UrlParams.label(), "URL parameters");
+    assert_eq!(
+        TranslatePlugin.accepts("hello").unwrap().as_ref(),
+        "Translate this text"
+    );
 }
