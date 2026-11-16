@@ -10,10 +10,9 @@ use std::ops::RangeInclusive;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use gpui_kit::{App, Global};
+use gpui_kit::component::{Theme, ThemeMode};
+use gpui_kit::{App, Global, Window, WindowAppearance};
 use serde::{Deserialize, Serialize};
-
-use crate::theme;
 
 /// Accepted UI font sizes in pixels; values outside are clamped.
 pub const FONT_SIZES: RangeInclusive<f32> = 12.0..=20.0;
@@ -37,6 +36,11 @@ pub struct Settings {
     pub window_radius: f32,
     /// Interface language.
     pub language: Language,
+    /// Color mode shared by the interface and code editors.
+    pub appearance: Appearance,
+    /// Registered theme names used in each color mode.
+    pub light_theme: String,
+    pub dark_theme: String,
     /// The `[json]` table; tables come last because TOML writes them after
     /// plain keys.
     pub json: JsonSettings,
@@ -83,9 +87,30 @@ pub enum DiffLayout {
     Unified,
 }
 
+/// The app's color preference; system mode follows the operating system.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Appearance {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl Appearance {
+    /// Resolves the effective theme without allowing OS changes to override an explicit choice.
+    pub fn resolve(self, system: WindowAppearance) -> ThemeMode {
+        match self {
+            Self::System => system.into(),
+            Self::Light => ThemeMode::Light,
+            Self::Dark => ThemeMode::Dark,
+        }
+    }
+}
+
 impl Default for Settings {
-    /// Theme fonts, 16 px, 4 px window corners, the system language, no soft
-    /// wrap and a split word-level diff with every comparison switch off.
+    /// Theme fonts, 16 px, 4 px window corners, system language and appearance,
+    /// no soft wrap and a split word-level diff with every comparison switch off.
     fn default() -> Self {
         Self {
             ui_font: None,
@@ -93,6 +118,9 @@ impl Default for Settings {
             font_size: 16.,
             window_radius: 4.,
             language: Language::System,
+            appearance: Appearance::System,
+            light_theme: "Default Light".into(),
+            dark_theme: "Default Dark".into(),
             json: JsonSettings::default(),
             diff: DiffSettings::default(),
         }
@@ -239,6 +267,7 @@ impl SettingsStore {
     /// Loads `<config dir>/rtools/settings.toml` and applies it; must run
     /// before any window opens.
     pub fn init(cx: &mut App) {
+        Self::register_themes(cx);
         let mut file = SettingsFile::new(
             dirs::config_dir()
                 .unwrap_or_else(std::env::temp_dir)
@@ -247,16 +276,31 @@ impl SettingsStore {
         );
         let settings = file.load();
         cx.set_global(Self { file, settings });
-        Self::apply(cx);
+        Self::apply(cx, None);
     }
 
-    /// Re-reads the settings file so edits made by hand take effect, and
-    /// re-applies it, which also picks up a changed system appearance. The
-    /// file is never written here.
+    /// Keeps every live window in sync with OS appearance changes while following the system.
+    pub fn observe_appearance(window: &Window) {
+        window
+            .observe_window_appearance(|window, cx| {
+                let settings = &cx.global::<Self>().settings;
+                // A shared theme needs only one update even when several windows observe the change.
+                if settings.appearance == Appearance::System
+                    && settings.appearance.resolve(window.appearance()) != Theme::global(cx).mode
+                {
+                    settings.clone().apply_theme(cx);
+                }
+            })
+            .detach();
+    }
+
+    /// Re-reads manual edits and applies changed preferences or system appearance.
+    /// The file is never written here.
     pub fn reload(cx: &mut App) {
         let store = cx.global_mut::<Self>();
-        store.settings = store.file.load();
-        Self::apply(cx);
+        let settings = store.file.load();
+        let before = std::mem::replace(&mut store.settings, settings);
+        Self::apply(cx, Some(&before));
     }
 
     /// Changes the settings, applies them to every window right away and
@@ -268,6 +312,17 @@ impl SettingsStore {
         if store.settings == before {
             return;
         }
+        if store.settings.appearance != before.appearance
+            || store.settings.light_theme != before.light_theme
+            || store.settings.dark_theme != before.dark_theme
+        {
+            tracing::info!(
+                "theme preferences changed: mode {:?}, light {}, dark {}",
+                store.settings.appearance,
+                store.settings.light_theme,
+                store.settings.dark_theme
+            );
+        }
         if let Err(err) = store.file.save(&store.settings) {
             tracing::warn!(
                 "saving settings to {} failed: {}",
@@ -275,14 +330,25 @@ impl SettingsStore {
                 err
             );
         }
-        Self::apply(cx);
+        Self::apply(cx, Some(&before));
     }
 
-    /// Puts the settings in effect: the interface language, then the fonts and
-    /// theme tokens, which refreshes every window.
-    fn apply(cx: &mut App) {
+    /// Applies changed global preferences, loading the theme unconditionally at startup.
+    fn apply(cx: &mut App, before: Option<&Settings>) {
         let settings = cx.global::<Self>().settings.clone();
-        rust_i18n::set_locale(settings.language.resolve());
-        theme::apply(&settings, cx);
+        let locale = settings.language.resolve();
+        let locale_changed = &*rust_i18n::locale() != locale;
+        if locale_changed {
+            tracing::info!("applying interface language {}", locale);
+            rust_i18n::set_locale(locale);
+        }
+        if before.is_none_or(|before| settings.theme_changed(before))
+            || settings.appearance.resolve(cx.window_appearance()) != Theme::global(cx).mode
+        {
+            settings.apply_theme(cx);
+        } else if locale_changed {
+            // Labels in windows without a settings subscription must also be redrawn.
+            cx.refresh_windows();
+        }
     }
 }

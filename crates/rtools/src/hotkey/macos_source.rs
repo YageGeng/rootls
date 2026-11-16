@@ -11,7 +11,7 @@ use futures::channel::mpsc::UnboundedSender;
 use objc2_core_foundation::{CFMachPort, CFRetained, CFRunLoop, kCFRunLoopCommonModes};
 use objc2_core_graphics::{
     CGEvent, CGEventField, CGEventFlags, CGEventTapLocation, CGEventTapOptions,
-    CGEventTapPlacement, CGEventTapProxy, CGEventType,
+    CGEventTapPlacement, CGEventTapProxy, CGEventType, CGPreflightListenEventAccess,
 };
 
 use super::double_tap::{DoubleTap, KeyAction, KeyEvent, KeyKind};
@@ -41,6 +41,13 @@ impl Listener {
     /// Installs a listen-only tap; missing permission leaves the rest of the app usable.
     fn run(self) {
         tracing::info!("starting macOS keyboard event listener");
+        // An ad-hoc rebuild can invalidate TCC access even while Settings shows it enabled.
+        if !CGPreflightListenEventAccess() {
+            tracing::warn!(
+                "double-tap Ctrl unavailable: Input Monitoring is not granted to this build; quit rtools, remove its old entry in System Settings > Privacy & Security > Input Monitoring, add the installed rtools.app again and enable it, then restart; the menu bar remains available"
+            );
+            return;
+        }
         let listener = RefCell::new(self);
         // The context stays in place on this thread; RefCell prevents aliased mutable access.
         let tap = unsafe {
@@ -55,7 +62,7 @@ impl Listener {
         };
         let Some(tap) = tap else {
             tracing::warn!(
-                "macOS keyboard event tap unavailable; allow rtools in System Settings > Privacy & Security > Accessibility / Input Monitoring, then restart; `rtools toggle` remains available"
+                "macOS keyboard event tap creation failed despite Input Monitoring access; restart rtools and check its permission in System Settings > Privacy & Security > Input Monitoring; the menu bar remains available"
             );
             return;
         };
@@ -71,6 +78,14 @@ impl Listener {
         let mode = unsafe { kCFRunLoopCommonModes };
         run_loop.add_source(Some(&source), mode);
         CGEvent::tap_enable(&tap, true);
+        if !CGEvent::tap_is_enabled(&tap) {
+            tracing::warn!(
+                "macOS keyboard event tap remains disabled; check Input Monitoring access and restart rtools"
+            );
+            run_loop.remove_source(Some(&source), mode);
+            tap.invalidate();
+            return;
+        }
         listener.borrow_mut().tap = Some(tap);
         tracing::info!("macOS keyboard event listener enabled");
         CFRunLoop::run();

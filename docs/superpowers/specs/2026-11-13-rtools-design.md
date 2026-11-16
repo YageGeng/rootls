@@ -162,6 +162,8 @@ macOS 监听使用独立线程的 RunLoop；不调用 `rdev` 的字符转换，�
 
 - 文件：`dirs::config_dir()/rtools/settings.toml`（`toml` + `serde`），字段：`ui_font`、`mono_font`（`Option<String>`，缺省跟随主题）、`font_size`（12–20，默认 16）、`window_radius`（窗口圆角，0–24，默认 4）、`language`（`system` / `zh-CN` / `en`），以及插件分组 `[json]`：`soft_wrap`（JSON 编辑器自动换行，默认关）。缺字段用默认值，越界数值收进范围；文件损坏时 `tracing::warn!` 并用默认值，不覆盖原文件。
 - 应用：`Theme::update` 设置 `font_family`、`mono_font_family`、`font_size`（即 rem）、`window_radius`，`i18n` 切换语言；插件在渲染时读取 `SettingsStore` 中自己的分组。修改立即生效并写回文件。
+- 主题：`appearance = "system" | "light" | "dark"`，默认 `system`，旧配置缺少该字段时保持跟随系统。「外观 → 配色 → 明暗模式」下拉框同步切换整体界面和编辑器配色，立即生效并持久化；跟随系统时，所有窗口监听系统明暗变化，显式选择浅色或深色后不受系统变化影响。
+- 预置配色：内置 GPUI Kit v0.9.1 官方 21 个主题文件（36 种配色），加上 `Default Light` / `Default Dark` 共 38 种；资源在编译时嵌入，启动时注册到 `ThemeRegistry`，离线和任意工作目录下均可用。`light_theme`、`dark_theme` 分别保存浅色和深色主题名称，默认使用对应的 Default 配色；设置页提供按明暗过滤、可搜索的两个下拉框。未知名称或明暗不匹配时记录警告并回退对应默认配色，不重置其他偏好。来源提交和许可证随资源保留。
 - 入口：托盘菜单「设置…」、启动器「系统」分组「设置」。设置窗口是普通窗口（自绘标题栏），单实例：已打开时只激活。
 
 ### 4.7 国际化（2026-11-14）
@@ -271,7 +273,7 @@ macOS 监听使用独立线程的 RunLoop；不调用 `rdev` 的字符转换，�
 
 **窗口**
 - 弹窗与分离窗口都用客户端装饰（`WindowDecorations::Client`）+ 透明背景，由 `Root` 绘制圆角、边框与阴影。
-- 产品主题层设置 `window_radius = 12px`（主题 token，非调用点字面量）；明暗主题跟随系统（`Theme::sync_system_appearance`）。
+- 产品主题层应用设置中的窗口圆角和主题偏好（`Theme::change`）；明暗模式默认跟随系统，也可在设置中固定为浅色或深色。
 - 启动器宽 800，高度随内容；插件模式 800×600。
 
 **启动器**
@@ -290,7 +292,8 @@ macOS 监听使用独立线程的 RunLoop；不调用 `rdev` 的字符转换，�
 - 底栏：过滤 `Input`（小号、等宽字体、前缀为 muted 等宽「this」）占满剩余宽度；右侧 ghost 小号**文字**按钮，分三组并以竖分隔线隔开：格式化 / 压缩 | 转义 / 去转义 | 转 XML。
 - 左侧 JSON 错误：编辑器底部一条提示（上分隔线、`text_xs`、danger 色 + `circle-alert` 图标），文字「第 L 行第 C 列：消息」。
 - 过滤/转换错误：结果栏居中显示 danger 图标 + 标题（如「表达式错误」）+ muted 详情。
-- 编辑器行号栏底色与正文一致：主题层把 `highlight_theme.style.editor_background` 与 `editor_gutter_background` 设为 `background`，每次明暗切换后重新应用。
+- 默认配色的编辑器行号栏底色与正文一致：主题层把 `highlight_theme.style.editor_background` 与 `editor_gutter_background` 设为 `background`，每次明暗切换后重新应用；官方预置配色保留其自身的编辑器背景和语法样式。
+- 默认语法主题将 `property` 映射为已有的结构名称配色，使 JSON key 在浅色和深色模式下均有清晰颜色；沿用 `tree-sitter-json` 的 `@property` 捕获，不替换解析器。
 
 **全局统一规则（2026-11-14 经对照 Zed 确认）**
 - 字号三级：正文/控件 `text_base`、说明与次要文字 `text_sm`、页面标题 `text_lg font_medium`；控件统一组件默认中号尺寸，导航项 `h_8` 与之等高。

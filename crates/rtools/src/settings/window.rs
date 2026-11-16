@@ -9,7 +9,8 @@ use gpui_kit::component::searchable_list::SearchableVec;
 use gpui_kit::component::select::{Select, SelectEvent, SelectState};
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, Sizable as _, StyledExt as _, TitleBar, h_flex, v_flex,
+    ActiveTheme as _, Icon, Sizable as _, StyledExt as _, Theme, ThemeMode, ThemeRegistry,
+    TitleBar, h_flex, v_flex,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -17,7 +18,7 @@ use rust_i18n::t;
 
 use std::ops::RangeInclusive;
 
-use super::{FONT_SIZES, Language, Settings, SettingsStore, WINDOW_RADII};
+use super::{Appearance, FONT_SIZES, Language, Settings, SettingsStore, WINDOW_RADII};
 use crate::ui::Choice;
 
 actions!(settings_window, [CloseSettings]);
@@ -34,6 +35,10 @@ pub fn bind_keys(cx: &mut App) {
 type FontChoices = SearchableVec<Choice<Option<SharedString>>>;
 /// Language dropdown options.
 type LanguageChoices = Vec<Choice<Language>>;
+/// Color modes shared by the interface and editors.
+type AppearanceChoices = Vec<Choice<Appearance>>;
+/// Preset names filtered by light or dark mode.
+type ThemeChoices = SearchableVec<Choice<SharedString>>;
 
 /// A page of the sidebar navigation.
 #[derive(Clone, Copy, PartialEq)]
@@ -61,6 +66,9 @@ impl Page {
 /// One setting row; rows are listed in display order.
 #[derive(Clone, Copy, PartialEq)]
 enum Row {
+    Appearance,
+    LightTheme,
+    DarkTheme,
     UiFont,
     MonoFont,
     FontSize,
@@ -71,7 +79,10 @@ enum Row {
 
 impl Row {
     /// Every row, in display order.
-    const ALL: [Row; 6] = [
+    const ALL: [Row; 9] = [
+        Row::Appearance,
+        Row::LightTheme,
+        Row::DarkTheme,
         Row::UiFont,
         Row::MonoFont,
         Row::FontSize,
@@ -83,7 +94,13 @@ impl Row {
     /// The page the row belongs to.
     fn page(self) -> Page {
         match self {
-            Row::UiFont | Row::MonoFont | Row::FontSize | Row::WindowRadius => Page::Appearance,
+            Row::Appearance
+            | Row::LightTheme
+            | Row::DarkTheme
+            | Row::UiFont
+            | Row::MonoFont
+            | Row::FontSize
+            | Row::WindowRadius => Page::Appearance,
             Row::Language => Page::Language,
             Row::SoftWrap => Page::Json,
         }
@@ -92,6 +109,17 @@ impl Row {
     /// Translation keys of the row's section, title and description.
     fn keys(self) -> (&'static str, &'static str, &'static str) {
         match self {
+            Row::Appearance => ("settings.colors", "settings.theme", "settings.theme_detail"),
+            Row::LightTheme => (
+                "settings.colors",
+                "settings.light_theme",
+                "settings.light_theme_detail",
+            ),
+            Row::DarkTheme => (
+                "settings.colors",
+                "settings.dark_theme",
+                "settings.dark_theme_detail",
+            ),
             Row::UiFont => (
                 "settings.fonts",
                 "settings.ui_font",
@@ -136,12 +164,17 @@ impl Row {
 type FontField = fn(&mut Settings) -> &mut Option<String>;
 /// Points a number box at the setting it edits.
 type NumberField = fn(&mut Settings) -> &mut f32;
+/// Points a preset dropdown at its persisted theme name.
+type ThemeField = fn(&mut Settings) -> &mut String;
 
 /// The settings page: sidebar plus the rows of the current page or search.
 pub struct SettingsWindow {
     focus: FocusHandle,
     search: Entity<InputState>,
     page: Page,
+    appearance: Entity<SelectState<AppearanceChoices>>,
+    light_theme: Entity<SelectState<ThemeChoices>>,
+    dark_theme: Entity<SelectState<ThemeChoices>>,
     ui_font: Entity<SelectState<FontChoices>>,
     mono_font: Entity<SelectState<FontChoices>>,
     font_size: Entity<InputState>,
@@ -173,6 +206,32 @@ impl SettingsWindow {
 
         // Options, selections and placeholders are filled by `relabel` below.
         let search = cx.new(|cx| InputState::new(window, cx));
+        let appearance = cx.new(|cx| SelectState::new(Vec::new(), None, window, cx));
+        let presets = |mode, window: &mut Window, cx: &mut Context<Self>| {
+            let items: Vec<_> = ThemeRegistry::global(cx)
+                .sorted_themes()
+                .into_iter()
+                .filter(|theme| theme.mode == mode)
+                .map(|theme| Choice {
+                    label: theme.name.clone(),
+                    value: theme.name.clone(),
+                })
+                .collect();
+            let theme = Theme::global(cx);
+            let selected = if mode == ThemeMode::Dark {
+                theme.dark_theme.name.clone()
+            } else {
+                theme.light_theme.name.clone()
+            };
+            cx.new(|cx| {
+                let mut state =
+                    SelectState::new(SearchableVec::new(items), None, window, cx).searchable(true);
+                state.set_selected_value(&selected, window, cx);
+                state
+            })
+        };
+        let light_theme = presets(ThemeMode::Light, window, cx);
+        let dark_theme = presets(ThemeMode::Dark, window, cx);
         let ui_font = cx.new(|cx| {
             SelectState::new(SearchableVec::new(Vec::new()), None, window, cx).searchable(true)
         });
@@ -210,6 +269,17 @@ impl SettingsWindow {
                 })
             })
             .collect();
+        let theme_fields: [(&Entity<SelectState<ThemeChoices>>, ThemeField); 2] = [
+            (&light_theme, |settings| &mut settings.light_theme),
+            (&dark_theme, |settings| &mut settings.dark_theme),
+        ];
+        subscriptions.extend(theme_fields.into_iter().map(|(state, field)| {
+            cx.subscribe(state, move |_, _, event: &SelectEvent<ThemeChoices>, cx| {
+                if let SelectEvent::Confirm(Some(name)) = event {
+                    SettingsStore::update(cx, |settings| *field(settings) = name.to_string());
+                }
+            })
+        }));
         let number_fields: [(&Entity<InputState>, RangeInclusive<f32>, NumberField); 2] = [
             (&font_size, FONT_SIZES, |settings| &mut settings.font_size),
             (&window_radius, WINDOW_RADII, |settings| {
@@ -228,6 +298,15 @@ impl SettingsWindow {
             })
         }));
         subscriptions.extend([
+            cx.subscribe(
+                &appearance,
+                |_, _, event: &SelectEvent<AppearanceChoices>, cx| {
+                    if let SelectEvent::Confirm(Some(appearance)) = event {
+                        let appearance = *appearance;
+                        SettingsStore::update(cx, |settings| settings.appearance = appearance);
+                    }
+                },
+            ),
             cx.subscribe(&search, |_, _, event: &InputEvent, cx| {
                 if matches!(event, InputEvent::Change) {
                     cx.notify();
@@ -245,6 +324,22 @@ impl SettingsWindow {
             // Redraws switches and relabels the options after a language change.
             cx.observe_global_in::<SettingsStore>(window, |this, window, cx| {
                 this.relabel(window, cx);
+                // Reloading the settings file also updates an already-open dropdown.
+                let appearance = cx.global::<SettingsStore>().settings.appearance;
+                this.appearance.update(cx, |state, cx| {
+                    state.set_selected_value(&appearance, window, cx);
+                });
+                // Show the effective fallback when a hand-edited theme name is invalid.
+                let theme = Theme::global(cx);
+                let selected = [
+                    (&this.light_theme, theme.light_theme.name.clone()),
+                    (&this.dark_theme, theme.dark_theme.name.clone()),
+                ];
+                for (state, name) in selected {
+                    state.update(cx, |state, cx| {
+                        state.set_selected_value(&name, window, cx);
+                    });
+                }
                 cx.notify();
             }),
         ]);
@@ -253,6 +348,9 @@ impl SettingsWindow {
             focus: cx.focus_handle(),
             search,
             page: Page::Appearance,
+            appearance,
+            light_theme,
+            dark_theme,
             ui_font,
             mono_font,
             font_size,
@@ -277,6 +375,21 @@ impl SettingsWindow {
         }
         self.locale = locale;
         let settings = cx.global::<SettingsStore>().settings.clone();
+        let appearances = [
+            (Appearance::System, "settings.theme_system"),
+            (Appearance::Light, "settings.theme_light"),
+            (Appearance::Dark, "settings.theme_dark"),
+        ]
+        .into_iter()
+        .map(|(value, key)| Choice {
+            label: t!(key).into(),
+            value,
+        })
+        .collect();
+        self.appearance.update(cx, |state, cx| {
+            state.set_items(appearances, window, cx);
+            state.set_selected_value(&settings.appearance, window, cx);
+        });
         // "Theme default" first, then every installed family.
         let fonts: Vec<Choice<Option<SharedString>>> = std::iter::once(Choice {
             label: t!("settings.theme_font").into(),
@@ -364,6 +477,26 @@ impl SettingsWindow {
                 .into_any_element()
         };
         match row {
+            Row::Appearance => Select::new(&self.appearance)
+                .appearance(false)
+                .icon(IconName::ChevronsUpDown)
+                .bg(theme.secondary)
+                .rounded(theme.radius)
+                .into_any_element(),
+            Row::LightTheme | Row::DarkTheme => {
+                let state = if row == Row::LightTheme {
+                    &self.light_theme
+                } else {
+                    &self.dark_theme
+                };
+                Select::new(state)
+                    .appearance(false)
+                    .icon(IconName::ChevronsUpDown)
+                    .menu_width(rems(20.))
+                    .bg(theme.secondary)
+                    .rounded(theme.radius)
+                    .into_any_element()
+            }
             Row::UiFont => select_font(&self.ui_font),
             Row::MonoFont => select_font(&self.mono_font),
             Row::FontSize => number(&self.font_size),

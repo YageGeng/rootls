@@ -108,7 +108,7 @@ fn main() {
             match hotkey::start(commands) {
                 Ok(()) => tracing::info!("double-tap Ctrl listener started"),
                 Err(err) => tracing::warn!(
-                    "double-tap Ctrl unavailable ({}); on Linux add yourself to the input group (`sudo usermod -aG input $USER`), on macOS grant Accessibility access, or bind a system shortcut to `rtools toggle`",
+                    "double-tap Ctrl unavailable ({}); on Linux add yourself to the input group (`sudo usermod -aG input $USER`), on macOS grant Input Monitoring access, or bind a system shortcut to `rtools toggle`",
                     err
                 ),
             }

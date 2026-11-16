@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds a native macOS app bundle with the existing SVG icon and an ad-hoc signature.
+# Builds a native macOS app bundle with the existing SVG icon and a local signature.
 set -euo pipefail
 trap 'echo "macOS app packaging failed at line $LINENO" >&2' ERR
 
@@ -70,8 +70,17 @@ mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 install -m755 "$target/release/rtools" "$bundle/Contents/MacOS/rtools"
 install -m644 "$work/Info.plist" "$bundle/Contents/Info.plist"
 install -m644 "$work/rtools.icns" "$bundle/Contents/Resources/rtools.icns"
+# Distribute attribution with the presets embedded in the executable.
+mkdir -p "$bundle/Contents/Resources/licenses"
+install -m644 "$root/assets/themes/LICENSE-APACHE" \
+    "$bundle/Contents/Resources/licenses/gpui-kit-themes.txt"
+install -m644 "$root/assets/themes/README.md" \
+    "$bundle/Contents/Resources/licenses/gpui-kit-themes-source.md"
 
-# Ad-hoc signing seals the bundle for local use; distribution needs Developer ID signing.
-codesign --force --sign - --timestamp=none "$bundle"
+# A stable certificate keeps TCC identity across updates; ad-hoc access is build-specific.
+codesign --force --sign "${CODESIGN_IDENTITY:--}" --timestamp=none "$bundle"
 codesign --verify --strict "$bundle"
 echo "Created $bundle"
+if [[ "${CODESIGN_IDENTITY:--}" == - ]]; then
+    echo "Ad-hoc build: after replacing an authorized app, remove and re-add rtools in Input Monitoring, enable it, and restart."
+fi

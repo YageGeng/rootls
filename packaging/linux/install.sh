@@ -12,6 +12,9 @@ cargo build --release --manifest-path "$root/Cargo.toml"
 install -Dm755 -s "$root/target/release/rtools" "$bin/rtools"
 install -Dm644 "$root/packaging/linux/$id.desktop" "$data/applications/$id.desktop"
 install -Dm644 "$root/assets/icons/rtools.svg" "$data/icons/hicolor/scalable/apps/$id.svg"
+# Keep the embedded presets' license and source attribution beside the application data.
+install -Dm644 "$root/assets/themes/LICENSE-APACHE" "$data/licenses/rtools/gpui-kit-themes.txt"
+install -Dm644 "$root/assets/themes/README.md" "$data/licenses/rtools/gpui-kit-themes-source.md"
 for size in 32 256; do
     install -Dm644 "$root/assets/icons/rtools-$size.png" "$data/icons/hicolor/${size}x${size}/apps/$id.png"
 done

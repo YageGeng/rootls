@@ -1,4 +1,8 @@
-use rtools::settings::{DiffLayout, DiffSettings, JsonSettings, Language, Settings, SettingsFile};
+use gpui_kit::WindowAppearance;
+use gpui_kit::component::ThemeMode;
+use rtools::settings::{
+    Appearance, DiffLayout, DiffSettings, JsonSettings, Language, Settings, SettingsFile,
+};
 use std::fs;
 
 fn temp_file(name: &str) -> std::path::PathBuf {
@@ -7,6 +11,7 @@ fn temp_file(name: &str) -> std::path::PathBuf {
     dir.join("settings.toml")
 }
 
+/// Older configuration files keep the default palette and system appearance.
 #[test]
 fn defaults_follow_the_theme_and_system() {
     let settings = Settings::default();
@@ -15,6 +20,9 @@ fn defaults_follow_the_theme_and_system() {
     assert_eq!(settings.font_size, 16.);
     assert_eq!(settings.window_radius, 4.);
     assert_eq!(settings.language, Language::System);
+    assert_eq!(settings.appearance, Appearance::System);
+    assert_eq!(settings.light_theme, "Default Light");
+    assert_eq!(settings.dark_theme, "Default Dark");
     assert!(!settings.json.soft_wrap);
     assert_eq!(settings.diff, DiffSettings::default());
     assert_eq!(settings.diff.layout, DiffLayout::Split);
@@ -23,6 +31,7 @@ fn defaults_follow_the_theme_and_system() {
     assert!(!settings.diff.fold_unchanged);
 }
 
+/// Both preset selections survive alongside all existing preferences.
 #[test]
 fn toml_round_trips() {
     let settings = Settings {
@@ -31,6 +40,9 @@ fn toml_round_trips() {
         font_size: 14.,
         window_radius: 6.,
         language: Language::ZhCn,
+        appearance: Appearance::Dark,
+        light_theme: "Catppuccin Latte".into(),
+        dark_theme: "Catppuccin Mocha".into(),
         json: JsonSettings { soft_wrap: true },
         diff: DiffSettings {
             layout: DiffLayout::Unified,
@@ -57,6 +69,41 @@ fn missing_fields_take_defaults() {
             ..Settings::default()
         }
     );
+}
+
+/// Each explicit choice survives saving, while old files still follow the system.
+#[test]
+fn appearance_round_trips_and_defaults_for_older_settings() {
+    for (value, appearance) in [
+        ("system", Appearance::System),
+        ("light", Appearance::Light),
+        ("dark", Appearance::Dark),
+    ] {
+        let settings = format!("appearance = \"{value}\"")
+            .parse::<Settings>()
+            .unwrap();
+        assert_eq!(settings.appearance, appearance);
+        assert_eq!(settings.to_string().parse::<Settings>().unwrap(), settings);
+    }
+    assert_eq!(
+        "language = \"en\"".parse::<Settings>().unwrap().appearance,
+        Appearance::System
+    );
+}
+
+/// Explicit modes ignore OS changes; system mode handles regular and vibrant appearances.
+#[test]
+fn appearance_resolves_the_system_only_when_requested() {
+    for (system, expected) in [
+        (WindowAppearance::Light, ThemeMode::Light),
+        (WindowAppearance::VibrantLight, ThemeMode::Light),
+        (WindowAppearance::Dark, ThemeMode::Dark),
+        (WindowAppearance::VibrantDark, ThemeMode::Dark),
+    ] {
+        assert_eq!(Appearance::System.resolve(system), expected);
+        assert_eq!(Appearance::Light.resolve(system), ThemeMode::Light);
+        assert_eq!(Appearance::Dark.resolve(system), ThemeMode::Dark);
+    }
 }
 
 #[test]

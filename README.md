@@ -61,7 +61,7 @@
 
 从托盘菜单、启动器里的「设置」项或 `rtools settings` 打开设置窗口，修改立即生效：
 
-- **外观**：界面字体、编辑器字体、字号（12–20）、窗口圆角（0–24）
+- **外观**：明暗模式（跟随系统 / 浅色 / 深色）、浅色主题、深色主题、界面字体、编辑器字体、字号（12–20）、窗口圆角（0–24）。内置 GPUI Kit 官方 36 种配色和 2 种默认配色，包含 Catppuccin、Tokyo Night、Ayu、Gruvbox、Solarized 等；主题下拉框支持搜索，界面与代码配色同步切换并保存，离线可用。
 - **语言**：跟随系统 / 简体中文 / English
 - **JSON 编辑器**：自动换行
 
@@ -91,9 +91,17 @@ open "$HOME/Applications/rtools.app"
 "$HOME/Applications/rtools.app/Contents/MacOS/rtools" toggle
 ```
 
-双击 `Ctrl` 使用 macOS 原始键盘事件监听，不读取输入法布局或转换输入字符。需要在「系统设置 → 隐私与安全性 → 辅助功能 / 输入监控」中按系统提示为 rtools 授权，然后重启应用；从终端启动时可能还需要为终端应用授权。未授权时可通过菜单栏或上述 `toggle` 命令呼出。
+双击 `Ctrl` 使用 macOS 原始键盘事件监听，不读取输入法布局或转换输入字符。需要在「系统设置 → 隐私与安全性 → 输入监控」中添加安装好的 `rtools.app` 并开启权限，然后重启应用；从终端启动时可能还需要为终端应用授权。未授权时可通过菜单栏呼出。
 
-这里的临时签名不包含 Developer ID 签名或 Apple 公证，适用于本机源码构建；对外发布仍需另行配置签名和公证。
+**更新后双击 Ctrl 失效**：默认的临时签名（ad-hoc）会随构建内容变化，系统可能仍显示旧版本已授权，但新版本不满足旧授权的签名要求。先退出 rtools，在「输入监控」中选中旧的 rtools 条目并点减号移除，再点加号选择当前安装的 `rtools.app`、开启权限，最后重新启动。应用启动时会检查当前构建的实际权限，不把缺少键盘事件的监听报告为已启用。
+
+如果钥匙串中已有代码签名证书，可在每次构建时使用同一身份，避免因 ad-hoc 签名变化反复重新授权：
+
+```bash
+CODESIGN_IDENTITY='Apple Development: Your Name (TEAMID)' ./packaging/macos/bundle.sh
+```
+
+首次从临时签名切换为证书签名后仍需重新授权。脚本默认使用本地临时签名，不执行 Apple 公证；对外发布仍需另行配置 Developer ID 签名和公证流程。
 
 ## 安装（Linux）
 
@@ -159,6 +167,9 @@ mono_font = "JetBrains Mono"   # 省略则跟随主题
 font_size = 16.0               # 12–20
 window_radius = 4.0            # 0–24
 language = "system"            # system / zh-CN / en
+appearance = "system"          # system / light / dark，默认跟随系统
+light_theme = "Default Light"  # 也可选择 Catppuccin Latte、Solarized Light 等
+dark_theme = "Default Dark"    # 也可选择 Catppuccin Mocha、Tokyo Night 等
 
 [json]
 soft_wrap = false

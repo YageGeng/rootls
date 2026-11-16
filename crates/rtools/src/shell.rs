@@ -98,15 +98,19 @@ impl Shell {
 
     /// Opens the settings window, or brings it forward when it is already open.
     pub fn open_settings(cx: &mut App) {
+        // The macOS launcher is a non-activating panel; normal windows need app activation.
+        cx.activate(true);
         if let Some(handle) = cx.global::<Shell>().settings
             && handle
                 .update(cx, |_, window, _| window.activate_window())
                 .is_ok()
         {
+            tracing::info!("activated the existing settings window");
             return;
         }
         let options = Self::framed_window(SETTINGS_SIZE, cx);
         let opened = open_window(options, cx, |window, cx| {
+            SettingsStore::observe_appearance(window);
             window.set_window_title(&t!("settings.window_title"));
             let view = cx.new(|cx| SettingsWindow::new(window, cx));
             window.focus(&view.focus_handle(cx), cx);
@@ -123,8 +127,11 @@ impl Shell {
 
     /// Opens a plugin view in a normal window with the client-side title bar.
     pub(crate) fn detach(view: PluginView, title: SharedString, cx: &mut App) {
+        // The launcher does not activate the app, so bring detached windows forward explicitly.
+        cx.activate(true);
         let options = Self::framed_window(DETACHED_SIZE, cx);
         let opened = open_window(options, cx, |window, cx| {
+            SettingsStore::observe_appearance(window);
             window.set_window_title(&title);
             window.focus(&view.focus, cx);
             cx.new(|_| Detached { view })
@@ -158,6 +165,7 @@ impl Shell {
         let overlay = Self::overlay_options(cx);
         let in_overlay = overlay.is_some();
         let build = move |window: &mut Window, cx: &mut App| {
+            SettingsStore::observe_appearance(window);
             let launcher = existing
                 .unwrap_or_else(|| cx.new(|cx| Launcher::new(registry, data_root, window, cx)));
             launcher.update(cx, |launcher, cx| launcher.attach(in_overlay, window, cx));

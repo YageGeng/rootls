@@ -91,8 +91,38 @@ settings:
     en: Appearance
     zh-CN: 外观
   appearance_subtitle:
-    en: Fonts, interface scale and window corners
-    zh-CN: 字体、界面缩放与窗口圆角
+    en: Theme, fonts, interface scale and window corners
+    zh-CN: 主题、字体、界面缩放与窗口圆角
+  colors:
+    en: Colors
+    zh-CN: 配色
+  theme:
+    en: Color mode
+    zh-CN: 明暗模式
+  theme_detail:
+    en: Changes the interface and code colors together; takes effect immediately
+    zh-CN: 界面与代码配色同步切换，立即生效
+  theme_system:
+    en: System
+    zh-CN: 跟随系统
+  theme_light:
+    en: Light
+    zh-CN: 浅色
+  theme_dark:
+    en: Dark
+    zh-CN: 深色
+  light_theme:
+    en: Light theme
+    zh-CN: 浅色主题
+  light_theme_detail:
+    en: Preset for the interface and code in light mode
+    zh-CN: 浅色模式下的界面与代码配色
+  dark_theme:
+    en: Dark theme
+    zh-CN: 深色主题
+  dark_theme_detail:
+    en: Preset for the interface and code in dark mode
+    zh-CN: 深色模式下的界面与代码配色
   fonts:
     en: Fonts
     zh-CN: 字体
