@@ -1,6 +1,11 @@
 //! rtools entry point: forwards commands to a running instance or becomes it.
 
-use std::thread;
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
+
+use std::{process::ExitCode, thread};
 
 use futures::StreamExt as _;
 use futures::channel::mpsc;
@@ -8,6 +13,7 @@ use gpui_kit::*;
 use rtools::assets::AppAssets;
 use rtools::cli::ShellCommand;
 use rtools::instance::InstanceName;
+use rtools::logging::LogFiles;
 use rtools::plugin::{Plugin, PluginRegistry};
 use rtools::plugins::diff::ui::DiffPlugin;
 use rtools::plugins::json::ui::JsonPlugin;
@@ -18,35 +24,46 @@ use rtools::{hotkey, launcher, settings, tray, ui};
 use tracing_subscriber::EnvFilter;
 
 /// Parses the command, hands it to a running instance, or starts the app.
-fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .init();
+fn main() -> ExitCode {
+    let _logs = match LogFiles::new().and_then(LogFiles::init) {
+        Ok(guard) => Some(guard),
+        Err(error) => {
+            tracing_subscriber::fmt()
+                .with_writer(std::io::stderr)
+                .with_env_filter(
+                    EnvFilter::try_from_default_env()
+                        .unwrap_or_else(|_| EnvFilter::new("warn,rtools=info")),
+                )
+                .init();
+            tracing::error!("persistent logging unavailable: {}", error);
+            None
+        }
+    };
 
     let command = match std::env::args().nth(1) {
         None => ShellCommand::Toggle,
         Some(arg) => match arg.parse::<ShellCommand>() {
             Ok(command) => command,
             Err(err) => {
-                eprintln!("{err}");
-                std::process::exit(2);
+                tracing::error!("{}", err);
+                return ExitCode::from(2);
             }
         },
     };
 
     let name = InstanceName::for_current_user();
     if name.send(command).is_ok() {
-        return;
+        return ExitCode::SUCCESS;
     }
     if command == ShellCommand::Quit {
-        eprintln!("rtools is not running");
-        return;
+        tracing::info!("rtools is not running");
+        return ExitCode::SUCCESS;
     }
     let server = match name.bind() {
         Ok(server) => server,
         Err(err) => {
             tracing::error!("listening on the instance socket failed: {}", err);
-            std::process::exit(1);
+            return ExitCode::FAILURE;
         }
     };
     tracing::info!("rtools started");
@@ -119,4 +136,5 @@ fn main() {
             // `Quit`, which returned above).
             Shell::run(command, cx);
         });
+    ExitCode::SUCCESS
 }

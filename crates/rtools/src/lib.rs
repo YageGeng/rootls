@@ -9,10 +9,12 @@
 rust_i18n::i18n!("locales", fallback = "en");
 
 pub mod assets;
+mod autostart;
 pub mod cli;
 pub mod hotkey;
 pub mod instance;
 pub mod launcher;
+pub mod logging;
 pub mod plugin;
 pub mod plugins;
 pub mod settings;

@@ -37,8 +37,10 @@ sys-locale = { workspace = true }
 # infra
 futures = { workspace = true }
 rust-i18n = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -50,11 +52,20 @@ ksni = { workspace = true, features = ["async-io"] }
 # platform
 tray-icon = { workspace = true }
 
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+# data formats
+plist = { workspace = true }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 # platform
+libc = { workspace = true }
+objc2 = { workspace = true }
 objc2-core-foundation = { workspace = true, features = ["CFMachPort", "CFRunLoop"] }
 objc2-core-graphics = { workspace = true, features = ["CGEvent", "CGEventTypes", "CGRemoteOperation"] }
+objc2-foundation = { workspace = true, features = ["std", "NSURL"] }
+objc2-service-management = { workspace = true, features = ["std", "SMAppService", "objc2", "objc2-foundation"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # platform
 rdev = { workspace = true }
+windows-registry = { workspace = true }

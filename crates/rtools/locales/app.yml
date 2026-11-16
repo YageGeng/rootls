@@ -10,8 +10,8 @@ app:
     en: Settings
     zh-CN: 设置
   settings_detail:
-    en: Fonts, font size and language
-    zh-CN: 字体、字号与语言
+    en: Startup, appearance, language and plugins
+    zh-CN: 自启、外观、语言与插件
 launcher:
   placeholder:
     en: Search plugins, or paste content
@@ -69,6 +69,33 @@ tray:
     en: Quit rtools
     zh-CN: 退出 rtools
 settings:
+  general:
+    en: General
+    zh-CN: 通用
+  general_subtitle:
+    en: Application startup behavior
+    zh-CN: 应用启动行为
+  startup:
+    en: Startup
+    zh-CN: 启动
+  autostart:
+    en: Launch at login
+    zh-CN: 开机自启
+  autostart_detail:
+    en: Start in the background when you sign in. Double-tap Ctrl or use the tray icon to open rtools.
+    zh-CN: 登录系统后在后台启动，通过双击 Ctrl 或托盘图标呼出 rtools。
+  autostart_error:
+    en: "Could not read or update startup settings: %{error}"
+    zh-CN: "无法读取或更新自启设置：%{error}"
+  autostart_pending:
+    en: Registered for the next login; macOS has not confirmed this background item yet.
+    zh-CN: 已设置为下次登录时启动，macOS 尚未确认此后台项目。
+  autostart_approval:
+    en: Blocked by macOS. Allow rtools in System Settings → General → Login Items & Extensions.
+    zh-CN: 已被 macOS 阻止，请在系统设置 → 通用 → 登录项与扩展中允许 rtools。
+  autostart_disabled:
+    en: Disabled by the system. Turn this switch off and on to enable it again.
+    zh-CN: 已被系统禁用，请关闭此开关后重新开启。
   window_title:
     en: rtools Settings
     zh-CN: rtools 设置

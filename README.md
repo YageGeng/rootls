@@ -74,10 +74,17 @@
 
 从托盘菜单、启动器里的「设置」项或 `rtools settings` 打开设置窗口，外观和语言修改立即生效：
 
+- **通用**：开机自启。默认关闭；开启后在当前用户登录 macOS、Linux 或 Windows 时后台启动，不弹出入口窗口。关闭只取消下次登录的自启，不退出当前进程。状态直接读取系统注册信息，不写入 `settings.toml`。
 - **外观**：明暗模式（跟随系统 / 浅色 / 深色）、浅色主题、深色主题、界面字体、编辑器字体、字号（12–20）、窗口圆角（0–24）。内置 GPUI Kit 官方 36 种配色和 2 种默认配色，包含 Catppuccin、Tokyo Night、Ayu、Gruvbox、Solarized 等；主题下拉框支持搜索，界面与代码配色同步切换并保存，离线可用。
 - **语言**：跟随系统 / 简体中文 / English
 - **JSON 编辑器**：自动换行
 - **AI 翻译**：连接地址和模型、系统凭据与环境变量来源、连接测试；连接和 Key 分别显式保存。
+
+自启只作用于当前用户：macOS 使用 `~/Library/LaunchAgents/dev.rtools.rtools.plist`；Linux 使用 `$XDG_CONFIG_HOME/autostart/dev.rtools.rtools.desktop`（默认 `~/.config/autostart/`）；Windows 使用 `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`。请在最终安装位置打开应用后启用；移动应用后重新关闭、开启一次以更新路径。系统的后台运行限制或企业策略仍可能阻止启动。
+
+开关表示是否保留自启注册。macOS 会另外检查 launchd 的禁用状态与系统后台项目授权；尚未被系统识别、需要授权或被禁用时，会在开关旁显示原因，不把文件存在直接视为可以启动。明确重新开启时会清除 rtools 的 launchd 禁用标记，但系统授权仍需用户在系统设置中允许。Windows 也会显示任务管理器禁用状态。关闭、重新打开设置窗口不会中断或重复提交正在进行的操作。
+
+诊断日志每天轮转，最多保留 7 个日志文件；默认记录警告、错误与 rtools 的关键生命周期事件，可通过 `RUST_LOG` 调整级别。日志路径：macOS 为 `~/Library/Logs/rtools/`，Linux 为 `$XDG_STATE_HOME/rtools/logs/`（默认 `~/.local/state/rtools/logs/`），Windows 为 `%LOCALAPPDATA%/rtools/logs/`。Windows 调试构建保留控制台，发布构建不弹控制台窗口，仍会写入文件日志。
 
 ## 安装（macOS）
 
@@ -155,6 +162,7 @@ sudo usermod -aG input $USER
 |---|---|
 | `rtools` 或 `rtools toggle` | 显示或隐藏启动器；未运行时先启动再显示 |
 | `rtools settings` | 打开设置窗口 |
+| `rtools background` | 仅启动后台进程；已运行时不改变窗口状态 |
 | `rtools quit` | 退出后台进程 |
 
 ### 快捷键

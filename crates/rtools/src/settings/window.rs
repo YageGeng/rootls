@@ -9,8 +9,8 @@ use gpui_kit::component::searchable_list::SearchableVec;
 use gpui_kit::component::select::{Select, SelectEvent, SelectState};
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, Sizable as _, StyledExt as _, Theme, ThemeMode, ThemeRegistry,
-    TitleBar, h_flex, v_flex,
+    ActiveTheme as _, Disableable as _, Icon, Sizable as _, StyledExt as _, Theme, ThemeMode,
+    ThemeRegistry, TitleBar, h_flex, v_flex,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
@@ -19,6 +19,7 @@ use rust_i18n::t;
 use std::ops::RangeInclusive;
 
 use super::{Appearance, FONT_SIZES, Language, Settings, SettingsStore, WINDOW_RADII};
+use crate::autostart::AutostartStore;
 use crate::ui::Choice;
 
 actions!(settings_window, [CloseSettings]);
@@ -43,6 +44,7 @@ type ThemeChoices = SearchableVec<Choice<SharedString>>;
 /// A page of the sidebar navigation.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Page {
+    General,
     Appearance,
     Language,
     /// Options of the JSON editor plugin.
@@ -52,7 +54,8 @@ pub(crate) enum Page {
 
 impl Page {
     /// Every page, in sidebar order: the app first, then plugins.
-    const ALL: [Page; 4] = [
+    const ALL: [Page; 5] = [
+        Page::General,
         Page::Appearance,
         Page::Language,
         Page::Json,
@@ -62,6 +65,7 @@ impl Page {
     /// Translation keys of the page title and subtitle.
     fn keys(self) -> (&'static str, &'static str) {
         match self {
+            Page::General => ("settings.general", "settings.general_subtitle"),
             Page::Appearance => ("settings.appearance", "settings.appearance_subtitle"),
             Page::Language => ("settings.language", "settings.language_subtitle"),
             Page::Json => ("settings.json", "settings.json_subtitle"),
@@ -73,6 +77,7 @@ impl Page {
 /// One setting row; rows are listed in display order.
 #[derive(Clone, Copy, PartialEq)]
 enum Row {
+    Autostart,
     Appearance,
     LightTheme,
     DarkTheme,
@@ -86,7 +91,8 @@ enum Row {
 
 impl Row {
     /// Every row, in display order.
-    const ALL: [Row; 9] = [
+    const ALL: [Row; 10] = [
+        Row::Autostart,
         Row::Appearance,
         Row::LightTheme,
         Row::DarkTheme,
@@ -101,6 +107,7 @@ impl Row {
     /// The page the row belongs to.
     fn page(self) -> Page {
         match self {
+            Row::Autostart => Page::General,
             Row::Appearance
             | Row::LightTheme
             | Row::DarkTheme
@@ -116,6 +123,11 @@ impl Row {
     /// Translation keys of the row's section, title and description.
     fn keys(self) -> (&'static str, &'static str, &'static str) {
         match self {
+            Row::Autostart => (
+                "settings.startup",
+                "settings.autostart",
+                "settings.autostart_detail",
+            ),
             Row::Appearance => ("settings.colors", "settings.theme", "settings.theme_detail"),
             Row::LightTheme => (
                 "settings.colors",
@@ -306,6 +318,12 @@ impl SettingsWindow {
             })
         }));
         subscriptions.extend([
+            cx.observe_global::<AutostartStore>(|_, cx| cx.notify()),
+            cx.observe_window_activation(window, |_, window, cx| {
+                if window.is_window_active() {
+                    AutostartStore::request(None, cx);
+                }
+            }),
             cx.subscribe(
                 &appearance,
                 |_, _, event: &SelectEvent<AppearanceChoices>, cx| {
@@ -355,7 +373,7 @@ impl SettingsWindow {
         let mut this = Self {
             focus: cx.focus_handle(),
             search,
-            page: Page::Appearance,
+            page: Page::General,
             translate: None,
             appearance,
             light_theme,
@@ -372,6 +390,7 @@ impl SettingsWindow {
             _subscriptions: subscriptions,
         };
         this.relabel(window, cx);
+        AutostartStore::request(None, cx);
         this
     }
 
@@ -443,6 +462,9 @@ impl SettingsWindow {
     /// Shows a page, leaving any search.
     pub(crate) fn open_page(&mut self, page: Page, window: &mut Window, cx: &mut Context<Self>) {
         self.page = page;
+        if page == Page::General {
+            AutostartStore::request(None, cx);
+        }
         self.search
             .update(cx, |state, cx| state.set_value("", window, cx));
         cx.notify();
@@ -467,7 +489,7 @@ impl SettingsWindow {
     }
 
     /// The control lane element of a row.
-    fn control(&self, row: Row, cx: &App) -> AnyElement {
+    fn control(&self, row: Row, cx: &Context<Self>) -> AnyElement {
         let theme = cx.theme();
         let select_font = |state: &Entity<SelectState<FontChoices>>| {
             Select::new(state)
@@ -486,6 +508,20 @@ impl SettingsWindow {
                 .into_any_element()
         };
         match row {
+            Row::Autostart => h_flex()
+                .justify_end()
+                .child(
+                    Switch::new("autostart")
+                        .accessibility_label(t!("settings.autostart"))
+                        .checked(
+                            cx.global::<AutostartStore>()
+                                .status
+                                .is_some_and(|status| status.registered()),
+                        )
+                        .disabled(cx.global::<AutostartStore>().busy)
+                        .on_click(|checked, _, cx| AutostartStore::request(Some(*checked), cx)),
+                )
+                .into_any_element(),
             Row::Appearance => Select::new(&self.appearance)
                 .appearance(false)
                 .icon(IconName::ChevronsUpDown)
@@ -604,6 +640,7 @@ impl SettingsWindow {
     ) -> impl IntoElement {
         let theme = cx.theme();
         let (border, muted) = (theme.border, theme.muted_foreground);
+        let danger = theme.danger;
         let mono_font = theme.mono_font_family.clone();
         let rows: Vec<Row> = Row::ALL
             .into_iter()
@@ -656,7 +693,32 @@ impl SettingsWindow {
                                     .text_sm()
                                     .text_color(muted)
                                     .child(t!(detail).to_string()),
-                            ),
+                            )
+                            .when(*row == Row::Autostart, |this| {
+                                let startup = cx.global::<AutostartStore>();
+                                this.when_some(
+                                    startup.status.and_then(|status| status.notice_key()),
+                                    |this, key| {
+                                        this.child(
+                                            div()
+                                                .text_sm()
+                                                .text_color(muted)
+                                                .child(t!(key).to_string()),
+                                        )
+                                    },
+                                )
+                                .when_some(
+                                    startup.error.as_ref(),
+                                    |this, error| {
+                                        this.child(
+                                            div().text_sm().text_color(danger).child(
+                                                t!("settings.autostart_error", error = error)
+                                                    .to_string(),
+                                            ),
+                                        )
+                                    },
+                                )
+                            }),
                     )
                     .child(div().w_56().flex_none().child(self.control(*row, cx))),
             );
@@ -692,6 +754,8 @@ impl SettingsWindow {
             );
         }
 
+        // Native startup registration cannot be edited in settings.toml.
+        let show_settings_file = show_translate || rows.iter().any(|row| *row != Row::Autostart);
         v_flex()
             .id("settings-content")
             .flex_1()
@@ -700,28 +764,30 @@ impl SettingsWindow {
             .pt_5()
             .pb_8()
             .overflow_y_scroll()
-            .child(
-                h_flex()
-                    .h_7()
-                    .gap_4()
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .font_family(mono_font)
-                            .text_sm()
-                            .text_color(muted)
-                            .child(self.path_label.clone()),
-                    )
-                    .child(
-                        Button::new("edit-file")
-                            .outline()
-                            .small()
-                            .label(t!("settings.edit_file"))
-                            .on_click(cx.listener(|this, _, _, cx| this.edit_file(cx))),
-                    ),
-            )
+            .when(show_settings_file, |this| {
+                this.child(
+                    h_flex()
+                        .h_7()
+                        .gap_4()
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .font_family(mono_font)
+                                .text_sm()
+                                .text_color(muted)
+                                .child(self.path_label.clone()),
+                        )
+                        .child(
+                            Button::new("edit-file")
+                                .outline()
+                                .small()
+                                .label(t!("settings.edit_file"))
+                                .on_click(cx.listener(|this, _, _, cx| this.edit_file(cx))),
+                        ),
+                )
+            })
             .child(
                 v_flex()
                     .pt_5()

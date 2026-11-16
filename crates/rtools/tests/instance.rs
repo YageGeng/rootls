@@ -12,6 +12,7 @@ fn unique(tag: &str) -> InstanceName {
     }
 }
 
+/// CLI commands retain their wire spelling, including an idempotent background start.
 #[test]
 fn commands_parse_and_display() {
     assert_eq!(
@@ -24,6 +25,11 @@ fn commands_parse_and_display() {
         ShellCommand::Settings
     );
     assert_eq!(ShellCommand::Settings.to_string(), "settings");
+    assert_eq!(
+        "background".parse::<ShellCommand>().unwrap(),
+        ShellCommand::Background
+    );
+    assert_eq!(ShellCommand::Background.to_string(), "background");
     assert!(
         "open"
             .parse::<ShellCommand>()

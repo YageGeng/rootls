@@ -14,7 +14,7 @@ use crate::plugin::{PluginRegistry, PluginView};
 use crate::settings::SettingsStore;
 use crate::settings::window::{Page, SettingsWindow};
 
-/// Wayland application id of every rtools window; matches
+/// Stable application ID shared by desktop windows and login registrations; matches
 /// `packaging/linux/dev.rtools.rtools.desktop` so the desktop can name and group them.
 pub(crate) const APP_ID: &str = "dev.rtools.rtools";
 
@@ -52,6 +52,7 @@ impl Global for Shell {}
 impl Shell {
     /// Installs the shell; `data_root` holds one directory per plugin.
     pub fn init(registry: PluginRegistry, data_root: PathBuf, cx: &mut App) {
+        cx.set_global(crate::autostart::AutostartStore::default());
         cx.set_global(Shell {
             registry: Rc::new(registry),
             data_root,
@@ -65,6 +66,8 @@ impl Shell {
     /// Carries out a command from the command line, the tray or the hotkey.
     pub fn run(command: ShellCommand, cx: &mut App) {
         match command {
+            // Login startup must not toggle an already-running launcher's visibility.
+            ShellCommand::Background => {}
             ShellCommand::Toggle => Self::toggle(cx),
             ShellCommand::Settings => Self::open_settings(cx),
             ShellCommand::Quit => {
