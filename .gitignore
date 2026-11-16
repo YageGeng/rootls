@@ -1,4 +1,57 @@
-/target
-.DS_Store
+# Rust build, coverage, and distribution artifacts; keep Cargo.lock tracked.
+target/
+/build/
+/dist/
+/coverage/
+*.rs.bk
+*.profraw
+*.profdata
+*.app/
+*.dSYM/
+*.dmg
+*.pkg
 
-/.superpowers
+# Operating-system metadata.
+.DS_Store
+._*
+.AppleDouble/
+Thumbs.db
+Desktop.ini
+.directory
+
+# Editor state and backups; allow shared VS Code configuration.
+.idea/
+.history/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
+*.swp
+*.swo
+*~
+*.bak
+
+# Local logs and temporary files.
+*.log
+*.tmp
+*.temp
+/logs/
+/tmp/
+/temp/
+
+# Local environment and signing credentials; allow safe example files.
+.env
+.env.*
+!.env*.example
+!.env*.sample
+!.env*.template
+/.cargo/credentials
+/.cargo/credentials.toml
+*.p12
+*.pfx
+
+# Local tool caches; shared .cargo, .codex, and .rtk configuration stays tracked.
+.cache/
+.direnv/
+/.superpowers/
