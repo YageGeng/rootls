@@ -695,3 +695,115 @@ translate:
   error_output_limit:
     en: "Response size limit reached; translation is incomplete."
     zh-CN: "响应超过安全大小限制，译文不完整。"
+clipboard:
+  title:
+    en: "Clipboard history"
+    zh-CN: "剪贴板历史"
+  description:
+    en: "Search previous copies of text, images and file paths"
+    zh-CN: "搜索复制过的文本、图片和文件路径"
+  enable:
+    en: "Record clipboard history"
+    zh-CN: "记录剪贴板历史"
+  enable_detail:
+    en: "Save new copies on this device while rtools is running, even when its windows are closed."
+    zh-CN: "rtools 运行时把新复制的内容保存在本机，关闭窗口后仍会记录。"
+  off:
+    en: "Recording is off"
+    zh-CN: "记录已关闭"
+  preference_error:
+    en: "Recording is off for this session. The setting could not be saved for the next launch."
+    zh-CN: "本次运行已停止记录。开关设置保存失败，下次启动时会读取磁盘上的设置。"
+  starting:
+    en: "Starting clipboard monitoring…"
+    zh-CN: "正在启动剪贴板监听…"
+  recording:
+    en: "Recording new copies"
+    zh-CN: "正在记录新复制的内容"
+  unavailable:
+    en: "Clipboard access unavailable. Check desktop permissions or data-control support, then turn recording off and on."
+    zh-CN: "无法访问剪贴板。请检查系统权限或桌面的 data-control 支持，然后重新开启记录。"
+  limit:
+    en: "This copy exceeded the history limit. Previous history was kept."
+    zh-CN: "这次复制超出容量限制，已保留原有历史。"
+  missing:
+    en: "Content unavailable"
+    zh-CN: "内容不可用"
+  invalid:
+    en: "Unsupported or damaged clipboard content"
+    zh-CN: "剪贴板内容格式不支持或已损坏"
+  storage_error:
+    en: "Could not access clipboard history or its files"
+    zh-CN: "无法访问剪贴板历史或相关文件"
+  image_decode_limit:
+    en: "This image is too large to display. The original is saved."
+    zh-CN: "图片过大，无法显示。原图副本已保存。"
+  partial:
+    en: "Confirm which available items to copy."
+    zh-CN: "请确认复制当前可用的成员。"
+  search:
+    en: "Search text, filenames or paths"
+    zh-CN: "搜索文本、文件名或路径"
+  images:
+    en: "Images only"
+    zh-CN: "仅图片"
+  empty:
+    en: "No matching history"
+    zh-CN: "没有匹配的历史记录"
+  group:
+    en: "%{images} images · %{others} other items"
+    zh-CN: "%{images} 张图片 · %{others} 个其他成员"
+  image_count:
+    en: "%{count} images"
+    zh-CN: "%{count} 张图片"
+  item_count:
+    en: "%{count} items"
+    zh-CN: "%{count} 项"
+  preview:
+    en: "Preview images"
+    zh-CN: "预览图片"
+  back_to_history:
+    en: "Back to history"
+    zh-CN: "返回历史列表"
+  previous_image:
+    en: "Previous image"
+    zh-CN: "上一张"
+  next_image:
+    en: "Next image"
+    zh-CN: "下一张"
+  failed_count:
+    en: "%{count} unavailable"
+    zh-CN: "%{count} 项不可用"
+  copy_available:
+    en: "Copy %{count} available items"
+    zh-CN: "复制可用的 %{count} 项"
+  copy_group:
+    en: "Copy group"
+    zh-CN: "复制整组"
+  copy_image:
+    en: "Copy image"
+    zh-CN: "复制图片"
+  copy_paths:
+    en: "Copy paths"
+    zh-CN: "复制路径"
+  copy_original_paths:
+    en: "Copy original paths"
+    zh-CN: "复制原路径"
+  copy:
+    en: "Copy"
+    zh-CN: "复制"
+  copied:
+    en: "Copied to clipboard"
+    zh-CN: "已复制到剪贴板"
+  delete:
+    en: "Delete entry"
+    zh-CN: "删除此条"
+  clear:
+    en: "Clear history"
+    zh-CN: "清空历史"
+  clear_detail:
+    en: "Clear all clipboard history? File lists copied from history may stop working."
+    zh-CN: "清空所有剪贴板历史？此前从历史复制的文件列表可能失效。"
+  cancel:
+    en: "Cancel"
+    zh-CN: "取消"

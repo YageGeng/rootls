@@ -15,6 +15,7 @@ use rtools::cli::ShellCommand;
 use rtools::instance::InstanceName;
 use rtools::logging::LogFiles;
 use rtools::plugin::{Plugin, PluginRegistry};
+use rtools::plugins::clipboard::{ClipboardPlugin, service::ClipboardState};
 use rtools::plugins::diff::ui::DiffPlugin;
 use rtools::plugins::json::ui::JsonPlugin;
 use rtools::plugins::translate::{TranslatePlugin, client::DeepSeekClient};
@@ -103,10 +104,12 @@ fn main() -> ExitCode {
                 Box::new(JsonPlugin) as Box<dyn Plugin>,
                 Box::new(DiffPlugin),
                 Box::new(TranslatePlugin),
+                Box::new(ClipboardPlugin),
             ]
             .into_iter()
             .collect();
             registry.bind_keys(cx);
+            ClipboardState::init(dirs::data_local_dir().map(|p| p.join("rtools/clipboard")), cx);
             let data_root = dirs::data_dir()
                 .unwrap_or_else(std::env::temp_dir)
                 .join("rtools");

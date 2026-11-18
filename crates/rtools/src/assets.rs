@@ -10,6 +10,7 @@ icon_assets!(
     ExtraIcons,
     [
         Braces,
+        Clipboard,
         Power,
         AppWindow,
         ListIndentIncrease,
@@ -23,6 +24,7 @@ icon_assets!(
         ArrowLeftRight,
         Eraser,
         Space,
+        Trash,
         Type,
         UnfoldVertical
     ]

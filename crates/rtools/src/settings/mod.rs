@@ -51,6 +51,16 @@ pub struct Settings {
     pub diff: DiffSettings,
     /// Translation connection and defaults; credentials never enter this table.
     pub translate: TranslateSettings,
+    /// Opt-in background clipboard history.
+    pub clipboard: ClipboardSettings,
+}
+
+/// Persistent opt-in for the resident clipboard monitor.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClipboardSettings {
+    /// Records new clipboard offers while the application is running.
+    pub enabled: bool,
 }
 
 /// Options of the JSON editor plugin.
@@ -129,6 +139,7 @@ impl Default for Settings {
             json: JsonSettings::default(),
             diff: DiffSettings::default(),
             translate: TranslateSettings::default(),
+            clipboard: ClipboardSettings::default(),
         }
     }
 }
@@ -163,6 +174,7 @@ impl fmt::Display for Settings {
 pub struct SettingsFile {
     path: PathBuf,
     broken: bool,
+    pub(crate) clipboard_save_failed: bool,
 }
 
 impl SettingsFile {
@@ -171,6 +183,7 @@ impl SettingsFile {
         Self {
             path,
             broken: false,
+            clipboard_save_failed: false,
         }
     }
 
@@ -183,7 +196,7 @@ impl SettingsFile {
     /// one (with a warning), which is left untouched for the user to fix.
     pub fn load(&mut self) -> Settings {
         self.broken = false;
-        match fs::read_to_string(&self.path) {
+        let mut settings: Settings = match fs::read_to_string(&self.path) {
             Ok(text) => text.parse().unwrap_or_else(|err| {
                 tracing::warn!(
                     "ignoring invalid settings file {}: {}",
@@ -202,7 +215,12 @@ impl SettingsFile {
                 );
                 Settings::default()
             }
+        };
+        // An on-disk opt-in can be stale after a failed request to stop recording.
+        if self.clipboard_save_failed {
+            settings.clipboard.enabled = false;
         }
+        settings
     }
 
     /// Writes `settings` atomically (temp file, then rename). A file that
@@ -220,7 +238,9 @@ impl SettingsFile {
         }
         let temp = self.path.with_extension("toml.tmp");
         fs::write(&temp, settings.to_string())?;
-        fs::rename(&temp, &self.path)
+        fs::rename(&temp, &self.path)?;
+        self.clipboard_save_failed = false;
+        Ok(())
     }
 }
 
@@ -272,6 +292,19 @@ pub struct SettingsStore {
 impl Global for SettingsStore {}
 
 impl SettingsStore {
+    /// Starts capture only after saving consent; a failed write keeps this session paused.
+    pub fn set_clipboard_enabled(&mut self, enabled: bool) {
+        self.settings.clipboard.enabled = enabled;
+        if let Err(error) = self.file.save(&self.settings) {
+            self.settings.clipboard.enabled = false;
+            self.file.clipboard_save_failed = true;
+            tracing::warn!(
+                "could not save clipboard recording preference: {}",
+                error.kind()
+            );
+        }
+    }
+
     /// Loads `<config dir>/rtools/settings.toml` and applies it; must run
     /// before any window opens.
     pub fn init(cx: &mut App) {

@@ -53,6 +53,7 @@ fn toml_round_trips() {
             fold_unchanged: true,
         },
         translate: Default::default(),
+        clipboard: Default::default(),
     };
     let text = settings.to_string();
     assert!(text.contains("language = \"zh-CN\""), "{text}");

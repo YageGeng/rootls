@@ -20,6 +20,7 @@ use std::ops::RangeInclusive;
 
 use super::{Appearance, FONT_SIZES, Language, Settings, SettingsStore, WINDOW_RADII};
 use crate::autostart::AutostartStore;
+use crate::plugins::clipboard::service::ClipboardState;
 use crate::ui::Choice;
 
 actions!(settings_window, [CloseSettings]);
@@ -50,16 +51,18 @@ pub(crate) enum Page {
     /// Options of the JSON editor plugin.
     Json,
     Translate,
+    Clipboard,
 }
 
 impl Page {
     /// Every page, in sidebar order: the app first, then plugins.
-    const ALL: [Page; 5] = [
+    const ALL: [Page; 6] = [
         Page::General,
         Page::Appearance,
         Page::Language,
         Page::Json,
         Page::Translate,
+        Page::Clipboard,
     ];
 
     /// Translation keys of the page title and subtitle.
@@ -70,6 +73,7 @@ impl Page {
             Page::Language => ("settings.language", "settings.language_subtitle"),
             Page::Json => ("settings.json", "settings.json_subtitle"),
             Page::Translate => ("translate.title", "translate.settings_subtitle"),
+            Page::Clipboard => ("clipboard.title", "clipboard.description"),
         }
     }
 }
@@ -87,11 +91,12 @@ enum Row {
     WindowRadius,
     Language,
     SoftWrap,
+    Clipboard,
 }
 
 impl Row {
     /// Every row, in display order.
-    const ALL: [Row; 10] = [
+    const ALL: [Row; 11] = [
         Row::Autostart,
         Row::Appearance,
         Row::LightTheme,
@@ -102,6 +107,7 @@ impl Row {
         Row::WindowRadius,
         Row::Language,
         Row::SoftWrap,
+        Row::Clipboard,
     ];
 
     /// The page the row belongs to.
@@ -117,6 +123,7 @@ impl Row {
             | Row::WindowRadius => Page::Appearance,
             Row::Language => Page::Language,
             Row::SoftWrap => Page::Json,
+            Row::Clipboard => Page::Clipboard,
         }
     }
 
@@ -163,6 +170,11 @@ impl Row {
                 "settings.display",
                 "settings.interface_language",
                 "settings.interface_language_detail",
+            ),
+            Row::Clipboard => (
+                "clipboard.title",
+                "clipboard.enable",
+                "clipboard.enable_detail",
             ),
             Row::SoftWrap => (
                 "settings.editor",
@@ -318,6 +330,7 @@ impl SettingsWindow {
             })
         }));
         subscriptions.extend([
+            cx.observe_global::<ClipboardState>(|_, cx| cx.notify()),
             cx.observe_global::<AutostartStore>(|_, cx| cx.notify()),
             cx.observe_window_activation(window, |_, window, cx| {
                 if window.is_window_active() {
@@ -552,6 +565,18 @@ impl SettingsWindow {
                 .bg(theme.secondary)
                 .rounded(theme.radius)
                 .into_any_element(),
+            Row::Clipboard => h_flex()
+                .justify_end()
+                .child(
+                    Switch::new("clipboard-history-enabled")
+                        .accessibility_label(t!("clipboard.enable"))
+                        .checked(cx.global::<SettingsStore>().settings.clipboard.enabled)
+                        .on_click(|checked, _, cx| {
+                            cx.global_mut::<SettingsStore>()
+                                .set_clipboard_enabled(*checked)
+                        }),
+                )
+                .into_any_element(),
             Row::SoftWrap => {
                 let soft_wrap = cx.global::<SettingsStore>().settings.json.soft_wrap;
                 h_flex()
@@ -663,6 +688,15 @@ impl SettingsWindow {
         let mut last_section = None;
         for row in &rows {
             let (section, row_title, detail) = row.keys();
+            let detail = if *row == Row::Clipboard {
+                format!(
+                    "{}\n{}",
+                    t!(detail),
+                    t!(cx.global::<ClipboardState>().status())
+                )
+            } else {
+                t!(detail).to_string()
+            };
             if last_section != Some(section) {
                 last_section = Some(section);
                 body = body.child(
@@ -688,12 +722,7 @@ impl SettingsWindow {
                             .min_w_0()
                             .gap_0p5()
                             .child(div().text_base().child(t!(row_title).to_string()))
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(muted)
-                                    .child(t!(detail).to_string()),
-                            )
+                            .child(div().text_sm().text_color(muted).child(detail))
                             .when(*row == Row::Autostart, |this| {
                                 let startup = cx.global::<AutostartStore>();
                                 this.when_some(

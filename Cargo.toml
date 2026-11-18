@@ -47,27 +47,35 @@ form_urlencoded = "1.2"
 image = { version = "0.25", default-features = false }
 plist = "1.10"
 quick-xml = "0.42"
+rusqlite = { version = "0.32", features = ["bundled"] }
 serde = "1.0"
 serde-saphyr = "2.1"
 serde_json = { version = "1.0", features = ["arbitrary_precision", "preserve_order"] }
+sha2 = "0.10"
 similar = "3"
 toml = "1"
 
 # platform
+clipboard-win = { version = "5.4", features = ["monitor", "std"] }
 dirs = "7"
 evdev = "0.13"
 interprocess = "2.4"
 ksni = { version = "0.3", default-features = false }
 libc = "0.2"
 objc2 = "0.6"
+objc2-app-kit = { version = "0.3.2", default-features = false }
 objc2-core-foundation = { version = "0.3.2", default-features = false }
 objc2-core-graphics = { version = "0.3.2", default-features = false }
 objc2-foundation = { version = "0.3.2", default-features = false }
 objc2-service-management = { version = "0.3.2", default-features = false }
 rdev = "0.5"
+rustix = "1"
 sys-locale = "0.3"
 tray-icon = "0.26"
 windows-registry = "0.6.1"
+windows-win = "3"
+wl-clipboard-rs = "0.9.5"
+x11rb = "0.13"
 
 # infra
 futures = "0.3"

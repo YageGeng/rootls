@@ -1,6 +1,6 @@
 # rtools
 
-一个用 Rust 编写、常驻后台的桌面效率启动器，灵感来自 uTools。界面基于 [GPUI](https://www.gpui.rs) 与 [gpui-kit](https://gpui-kit.com) 绘制，双击 `Ctrl` 随时呼出；内置插件有 **JSON 编辑器**、**文本对比** 和 **AI 翻译**。
+一个用 Rust 编写、常驻后台的桌面效率启动器，灵感来自 uTools。界面基于 [GPUI](https://www.gpui.rs) 与 [gpui-kit](https://gpui-kit.com) 绘制。双击 `Ctrl` 随时呼出，内置 **JSON 编辑器**、**文本对比**、**AI 翻译**和**剪贴板历史**。
 
 > 目前主要在 Linux（KDE Plasma · Wayland）上开发和验证。macOS 支持源码构建和 `.app` 打包；X11、macOS、Windows 的运行时功能尚未完整验证。
 
@@ -70,6 +70,17 @@
 
 协议由 `rig-core` 的 DeepSeek wire 处理，HTTP 由 `rig-reqwest` 提供；不启用自动重试或凭据重定向。技术模式通过提示词要求保留代码、标识符和链接，但仍应核对模型输出。
 
+### 剪贴板历史
+
+在「设置 → 剪贴板历史」开启「记录剪贴板历史」。默认关闭。开启后，rtools 在后台记录之后的新复制，隐藏启动器或关闭插件窗口都可以继续使用。关闭记录后仍可查看、复制和删除已有历史。
+
+- 在启动器输入「剪贴板」「剪切板」或 `clipboard` 打开。历史按首次创建时间降序排列。可搜正文、文件名或路径，也可以只看含图片的记录。每行右侧可复制或删除，键盘可用 ↑ / ↓ 选择、回车复制。
+- 一次复制多张图片只产生一条记录。点击行尾的眼睛可按原顺序预览，用 ← / → 切换、Esc 返回列表。PNG、JPEG 等图片和截图都保存本地副本。删除原图或重启 rtools 后，仍可把整组粘贴到支持多个文件的应用，也可单独复制一张作为图片粘贴。
+- 混选图片、普通文件或文件夹时，普通文件和文件夹只保存路径。原路径失效或某张图采集失败时，可复制剩余成员或取回原路径。
+- SQLite 按整组保留最近 1,000 条，内容总量上限为 512 MiB。整组恢复时按需导出图片。清空历史会同时删除导出的副本，之前复制到系统剪贴板的文件列表可能失效。
+
+记录器遵循来源应用提供的保密标记。macOS 需要允许访问剪贴板，Wayland 需要合成器支持 data-control 协议。监听状态可以在设置页查看。
+
 ### 设置
 
 从托盘菜单、启动器里的「设置」项或 `rtools settings` 打开设置窗口，外观和语言修改立即生效：
@@ -78,6 +89,7 @@
 - **外观**：明暗模式（跟随系统 / 浅色 / 深色）、浅色主题、深色主题、界面字体、编辑器字体、字号（12–20）、窗口圆角（0–24）。内置 GPUI Kit 官方 36 种配色和 2 种默认配色，包含 Catppuccin、Tokyo Night、Ayu、Gruvbox、Solarized 等；主题下拉框支持搜索，界面与代码配色同步切换并保存，离线可用。
 - **语言**：跟随系统 / 简体中文 / English
 - **JSON 编辑器**：自动换行
+- **剪贴板历史**可开启或关闭后台记录，并查看当前监听状态。
 - **AI 翻译**：连接地址和模型、系统凭据与环境变量来源、连接测试；连接和 Key 分别显式保存。
 
 自启只作用于当前用户：macOS 使用 `~/Library/LaunchAgents/dev.rtools.rtools.plist`；Linux 使用 `$XDG_CONFIG_HOME/autostart/dev.rtools.rtools.desktop`（默认 `~/.config/autostart/`）；Windows 使用 `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`。请在最终安装位置打开应用后启用；移动应用后重新关闭、开启一次以更新路径。系统的后台运行限制或企业策略仍可能阻止启动。
@@ -196,6 +208,9 @@ dark_theme = "Default Dark"    # 也可选择 Catppuccin Mocha、Tokyo Night 等
 [json]
 soft_wrap = false
 
+[clipboard]
+enabled = false                # 开启后记录新复制的内容
+
 [diff]                         # 由文本对比的对比视图修改
 layout = "split"               # split（并排）/ unified（统一）
 ignore_whitespace = false
@@ -209,6 +224,7 @@ fold_unchanged = false         # true 时折叠未改动的行
 |---|---|
 | JSON 编辑器草稿 | `~/.local/share/rtools/json/draft.json` |
 | 文本对比草稿 | `~/.local/share/rtools/diff/original.txt`、`modified.txt` |
+| 剪贴板历史与图片副本 | 系统用户数据目录下的 `rtools/clipboard/history.sqlite3`，整组恢复所需的文件在同目录的 `exports/` |
 | 单实例套接字 | `$XDG_RUNTIME_DIR/rtools.sock` |
 
 ## 开发
@@ -220,7 +236,7 @@ cargo clippy --all-targets -- -D warnings    # 静态检查
 cargo fmt --all                              # 格式化
 ```
 
-- **代码结构**（`crates/rtools/src`）：`shell` 管理窗口与命令，`launcher` 是启动器，`settings` 是设置与设置窗口，`hotkey` 负责双击 `Ctrl`，`tray` 是托盘，`instance` 负责单实例，`plugin` 定义插件契约（含共享的草稿自动保存），`ui` 是启动器与插件共用的界面件；插件位于 `plugins/`（`json`、`diff`、`translate`）；JSON / Diff 分为 `core` 和 `ui`，翻译按配置、Rig 客户端、凭据、会话状态与视图组织；插件之间互不引用。
+- **代码结构**（`crates/rtools/src`）：`shell` 管理窗口与命令，`launcher` 是启动器，`settings` 是设置与设置窗口，`hotkey` 负责双击 `Ctrl`，`tray` 是托盘，`instance` 负责单实例，`plugin` 定义插件契约（含共享的草稿自动保存），`ui` 是启动器与插件共用的界面件。插件位于 `plugins/`（`json`、`diff`、`translate`、`clipboard`）。JSON / Diff 分为 `core` 和 `ui`，翻译按配置、Rig 客户端、凭据、会话状态与视图组织，剪贴板历史按系统监听、内容采集、SQLite 存储与视图组织。
 - **设计文档**：`docs/superpowers/specs/2026-11-13-rtools-design.md`，文本对比见 `2026-11-14-rtools-diff-plugin-design.md`
 - **约定**：代码规范见 `AGENTS.md`，提交信息格式见 `.gitmessage`；仓库配置了 pre-commit（fmt + clippy）。
 

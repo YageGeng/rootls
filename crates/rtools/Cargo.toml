@@ -21,11 +21,13 @@ rquickjs = { workspace = true }
 
 # data formats
 form_urlencoded = { workspace = true }
-image = { workspace = true, features = ["png"] }
+image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
 quick-xml = { workspace = true }
+rusqlite = { workspace = true, features = ["hooks"] }
 serde = { workspace = true, features = ["derive"] }
 serde-saphyr = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 similar = { workspace = true }
 toml = { workspace = true }
 
@@ -47,6 +49,9 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 # platform
 evdev = { workspace = true }
 ksni = { workspace = true, features = ["async-io"] }
+rustix = { workspace = true, features = ["event"] }
+wl-clipboard-rs = { workspace = true }
+x11rb = { workspace = true, features = ["xfixes"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 # platform
@@ -60,12 +65,15 @@ plist = { workspace = true }
 # platform
 libc = { workspace = true }
 objc2 = { workspace = true }
+objc2-app-kit = { workspace = true, features = ["std", "NSPasteboard", "NSPasteboardItem"] }
 objc2-core-foundation = { workspace = true, features = ["CFMachPort", "CFRunLoop"] }
 objc2-core-graphics = { workspace = true, features = ["CGEvent", "CGEventTypes", "CGRemoteOperation"] }
-objc2-foundation = { workspace = true, features = ["std", "NSURL"] }
+objc2-foundation = { workspace = true, features = ["std", "NSArray", "NSData", "NSString", "NSURL"] }
 objc2-service-management = { workspace = true, features = ["std", "SMAppService", "objc2", "objc2-foundation"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # platform
+clipboard-win = { workspace = true }
 rdev = { workspace = true }
 windows-registry = { workspace = true }
+windows-win = { workspace = true }
