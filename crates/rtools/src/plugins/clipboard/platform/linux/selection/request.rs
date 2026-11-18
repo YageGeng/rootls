@@ -130,7 +130,12 @@ impl<'a> Request<'a> {
                 }
                 incremental = true;
             } else {
-                let format = if kind == AtomEnum::ATOM.into() { 32 } else { 8 };
+                // AtomEnum converts to several integer widths, so compare it as an X11 Atom.
+                let format = if kind == Atom::from(AtomEnum::ATOM) {
+                    32
+                } else {
+                    8
+                };
                 if reply.type_ != kind || reply.format != format {
                     return Err(Error::Platform);
                 }
