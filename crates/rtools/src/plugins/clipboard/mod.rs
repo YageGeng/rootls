@@ -61,6 +61,7 @@ impl Plugin for ClipboardPlugin {
             title: "clipboard.title",
             description: "clipboard.description",
             icon: IconName::Clipboard,
+            triggers: &["jqb"],
             keywords: &["clipboard", "history", "剪贴板", "剪切板"],
         };
         &MANIFEST

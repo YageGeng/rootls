@@ -21,7 +21,19 @@ impl TryFrom<Yaml<'_>> for Value {
     type Error = JsonError;
 
     /// Converts a YAML document whose top level is a mapping or sequence.
-    fn try_from(Yaml(src): Yaml<'_>) -> Result<Self, JsonError> {
+    fn try_from(source: Yaml<'_>) -> Result<Self, JsonError> {
+        Ok(source.value(source.parse()?))
+    }
+}
+
+impl Yaml<'_> {
+    /// Checks the same document accepted by import without constructing a JSON tree.
+    pub(crate) fn validate_document(&self) -> Result<(), JsonError> {
+        self.parse().map(drop)
+    }
+
+    /// Reads a mapping or sequence with spans into the untouched YAML source.
+    fn parse(&self) -> Result<Spanned<Node>, JsonError> {
         // Pasted documents may be far larger than the config files the default
         // budget is sized for; keep the depth and alias guards, lift the size caps.
         let options = serde_saphyr::options! {
@@ -30,10 +42,10 @@ impl TryFrom<Yaml<'_>> for Value {
                 max_events: usize::MAX,
             },
         };
-        let root: Spanned<Node> = serde_saphyr::from_str_with_options(src, options)
+        let root: Spanned<Node> = serde_saphyr::from_str_with_options(self.0, options)
             .map_err(|err| JsonError::Yaml(err.to_string()))?;
         match root.value {
-            Node::Seq(_) | Node::Map(_) => Ok(Source(src).value(root)),
+            Node::Seq(_) | Node::Map(_) => Ok(root),
             _ => Err(JsonError::Yaml(
                 t!("json.error.yaml_top_level").into_owned(),
             )),
@@ -181,10 +193,7 @@ impl Visitor<'_> for KeyVisitor {
     }
 }
 
-/// The YAML source, used to recover number literals by their byte span.
-struct Source<'a>(&'a str);
-
-impl Source<'_> {
+impl Yaml<'_> {
     /// Converts a node, preferring the literal text of numbers when it is valid JSON.
     fn value(&self, node: Spanned<Node>) -> Value {
         match node.value {

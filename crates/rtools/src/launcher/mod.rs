@@ -3,6 +3,7 @@
 
 mod panel;
 pub mod paste;
+mod search;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -24,6 +25,7 @@ use crate::shell::Shell;
 use crate::ui::{ButtonExt as _, INPUT_CONTEXT, Toolbar};
 use panel::{Content, PLUGIN_HEIGHT, Panel, RESIZE_ZONE, WIDTH};
 use paste::PastedInput;
+use search::LauncherSearch;
 
 actions!(launcher, [SelectPrev, SelectNext, Back, Hide, Detach]);
 
@@ -55,6 +57,7 @@ static SETTINGS: PluginManifest = PluginManifest {
     title: "app.settings_title",
     description: "app.settings_detail",
     icon: IconName::Settings,
+    triggers: &[],
     keywords: &["settings", "preferences", "rtools"],
 };
 
@@ -64,6 +67,7 @@ static QUIT: PluginManifest = PluginManifest {
     title: "app.quit_title",
     description: "app.quit_detail",
     icon: IconName::Power,
+    triggers: &[],
     keywords: &["quit", "exit", "rtools"],
 };
 
@@ -118,6 +122,7 @@ pub(crate) struct Launcher {
     data_root: PathBuf,
     query: Entity<InputState>,
     pasted: Option<PastedInput>,
+    search: LauncherSearch,
     rows: Vec<Row>,
     selected: usize,
     mode: Mode,
@@ -151,11 +156,7 @@ impl Launcher {
         let query = cx.new(|cx| InputState::new(window, cx));
         let query_events =
             cx.subscribe_in(&query, window, |this, _, event, window, cx| match event {
-                // Content rows depend only on the paste, computed once in `intercept_paste`.
-                InputEvent::Change if this.pasted.is_none() => {
-                    this.refresh_rows(cx);
-                    this.sync_window_size(window);
-                }
+                InputEvent::Change if this.mode == Mode::List => this.query_changed(window, cx),
                 InputEvent::PressEnter { .. } => this.confirm(window, cx),
                 _ => {}
             });
@@ -164,6 +165,7 @@ impl Launcher {
             data_root,
             query,
             pasted: None,
+            search: LauncherSearch::default(),
             rows: Vec::new(),
             selected: 0,
             mode: Mode::List,
@@ -181,6 +183,11 @@ impl Launcher {
     /// draws its panel into, or a popup it fills. Every opening starts centered.
     pub fn attach(&mut self, overlay: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.overlay = overlay;
+        // A pending Enter from a hidden popup must never activate a newly opened window.
+        self.search.confirm_pending = false;
+        if self.mode == Mode::List {
+            self.refresh_rows(cx);
+        }
         self.panel.recenter();
         self.panel.anchor_list(self.content_rems());
         // The language may have changed while the popup was hidden.
@@ -222,36 +229,6 @@ impl Launcher {
         if let Some(view) = self.views.get(&index) {
             window.focus(&view.focus, cx);
         }
-    }
-
-    /// Recomputes the rows for the query or the pasted text.
-    fn refresh_rows(&mut self, cx: &mut Context<Self>) {
-        self.rows = match &self.pasted {
-            Some(pasted) => self
-                .registry
-                .search_content(pasted.text())
-                .into_iter()
-                .map(Row::Plugin)
-                .collect(),
-            None => {
-                let query = self.query.read(cx).value();
-                let needle = query.trim().to_lowercase();
-                let mut rows: Vec<Row> = self
-                    .registry
-                    .search(&query)
-                    .into_iter()
-                    .map(Row::Plugin)
-                    .collect();
-                rows.extend(
-                    [Row::Settings, Row::Quit]
-                        .into_iter()
-                        .filter(|row| row.manifest(&self.registry).matches_keyword(&needle)),
-                );
-                rows
-            }
-        };
-        self.selected = 0;
-        cx.notify();
     }
 
     /// Content height in rem for the current mode and rows.
@@ -330,12 +307,16 @@ impl Launcher {
         let Some(pasted) = PastedInput::intercept(text) else {
             return false;
         };
-        self.pasted = Some(pasted);
+        tracing::debug!(
+            "Received {} pasted bytes in the launcher",
+            pasted.text().len()
+        );
+        self.pasted = (!pasted.preview().is_empty()).then_some(pasted);
         self.query
             .update(cx, |state, cx| state.set_value("", window, cx));
+        self.search.query = SharedString::default();
         self.sync_placeholder(window, cx);
-        self.refresh_rows(cx);
-        self.sync_window_size(window);
+        self.recognize(window, cx);
         true
     }
 
@@ -343,14 +324,15 @@ impl Launcher {
     fn clear_paste(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.pasted = None;
         self.sync_placeholder(window, cx);
-        self.refresh_rows(cx);
-        self.sync_window_size(window);
+        self.search.query = self.query.read(cx).value();
+        self.recognize(window, cx);
     }
 
     /// Moves the selection up, wrapping around.
     fn select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
         if !self.rows.is_empty() {
             self.selected = (self.selected + self.rows.len() - 1) % self.rows.len();
+            self.search.manual = Some(self.rows[self.selected].manifest(&self.registry).id);
             cx.notify();
         }
     }
@@ -359,12 +341,21 @@ impl Launcher {
     fn select_next(&mut self, _: &SelectNext, _: &mut Window, cx: &mut Context<Self>) {
         if !self.rows.is_empty() {
             self.selected = (self.selected + 1) % self.rows.len();
+            self.search.manual = Some(self.rows[self.selected].manifest(&self.registry).id);
             cx.notify();
         }
     }
 
     /// Activates the selected row (Enter in the search box, or a click).
     fn confirm(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.mode != Mode::List {
+            return;
+        }
+        self.query_changed(window, cx);
+        if self.search.task.is_some() {
+            self.search.confirm_pending = true;
+            return;
+        }
         match self.rows.get(self.selected) {
             Some(Row::Settings) => {
                 self.close(window, cx);
@@ -439,12 +430,15 @@ impl Launcher {
             return;
         };
         self.mode = Mode::List;
+        // A consumed paste must not supply matches when the launcher opens again.
+        self.clear_paste(window, cx);
         self.close(window, cx);
         cx.defer(move |cx| Shell::detach(view, title, cx));
     }
 
     /// Closes the popup window; the launcher entity and its state survive.
     fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.search.confirm_pending = false;
         self.activation = None;
         window.remove_window();
         Shell::forget_popup(cx);
@@ -560,7 +554,14 @@ impl Launcher {
                 .justify_center()
                 .text_sm()
                 .text_color(muted)
-                .child(t!("launcher.no_match").to_string())
+                .child(
+                    if self.search.task.is_some() {
+                        t!("launcher.recognizing")
+                    } else {
+                        t!("launcher.no_match")
+                    }
+                    .to_string(),
+                )
                 .into_any_element();
         }
         let group_label = |key: &'static str| {
@@ -606,17 +607,26 @@ impl Launcher {
                 ..
             }) => (
                 t!("launcher.open_with", name = t!(manifest.title)).into(),
-                reason.clone(),
+                reason.label(),
             ),
             _ => (t!(manifest.title).into(), t!(manifest.description).into()),
         };
         let theme = cx.theme();
-        ListItem::new(manifest.id)
+        let id = manifest.id;
+        ListItem::new(id)
             .h(rems(ROW))
             .selected(index == self.selected)
             .on_click(cx.listener(move |this, _, window, cx| {
-                this.selected = index;
-                this.confirm(window, cx);
+                // Re-resolve the clicked identity if recognition reordered rows since rendering.
+                if let Some(current) = this
+                    .rows
+                    .iter()
+                    .position(|row| row.manifest(&this.registry).id == id)
+                {
+                    this.selected = current;
+                    this.search.manual = Some(id);
+                    this.confirm(window, cx);
+                }
             }))
             .child(
                 h_flex()

@@ -18,16 +18,14 @@ fn messages_follow_the_interface_language() {
         rtools::plugins::translate::core::TranslateError::MissingKey.label(),
         "translate.error_key"
     );
-    assert_eq!(
-        TranslatePlugin.accepts("hello").unwrap().as_ref(),
-        "翻译这段文本"
-    );
+    let cached = TranslatePlugin.recognizer().unwrap()("hello").unwrap();
+    let json_hit = rtools::plugins::json::ui::JsonPlugin.recognizer().unwrap()("{}").unwrap();
+    assert_eq!(cached.label().as_ref(), "翻译这段文本");
+    assert_eq!(json_hit.label().as_ref(), "识别为 JSON");
 
     rust_i18n::set_locale("en");
     assert_eq!(JsonError::Timeout.to_string(), "Timed out");
     assert_eq!(InputKind::UrlParams.label(), "URL parameters");
-    assert_eq!(
-        TranslatePlugin.accepts("hello").unwrap().as_ref(),
-        "Translate this text"
-    );
+    assert_eq!(cached.label().as_ref(), "Translate this text");
+    assert_eq!(json_hit.label().as_ref(), "Recognized as JSON");
 }

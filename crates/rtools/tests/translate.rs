@@ -239,8 +239,9 @@ fn plugin_registration_and_matching() {
     use rtools::{plugin::Plugin, plugins::translate::TranslatePlugin};
     let plugin = TranslatePlugin;
     assert_eq!(plugin.manifest().id, "translate");
-    assert!(plugin.accepts("Use the API.").is_some());
-    assert!(plugin.accepts(" \n ").is_none());
+    let recognize = plugin.recognizer().unwrap();
+    assert!(recognize("Use the API.").is_some());
+    assert!(recognize(" \n ").is_none());
     for icon in [
         plugin.manifest().icon,
         gpui_kit::assets::IconName::ArrowUpDown,

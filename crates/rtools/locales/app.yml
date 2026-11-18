@@ -17,8 +17,8 @@ launcher:
     en: Search plugins, or paste content
     zh-CN: 搜索插件，或粘贴内容
   pasted_placeholder:
-    en: Content pasted, choose how to open it
-    zh-CN: 已粘贴内容，选择处理方式
+    en: Search plugins for this content
+    zh-CN: 搜索可处理此内容的插件
   pasted_size:
     en: Pasted %{size}
     zh-CN: 已粘贴 %{size}
@@ -37,6 +37,9 @@ launcher:
   no_match:
     en: No matching plugins
     zh-CN: 没有匹配的插件
+  recognizing:
+    en: Checking which plugins can open this content…
+    zh-CN: 正在识别可处理此内容的插件…
   group_plugins:
     en: Plugins
     zh-CN: 插件
@@ -232,9 +235,22 @@ json:
   description:
     en: Format, filter and convert JSON
     zh-CN: 格式化、过滤、转换 JSON
-  recognized:
-    en: Recognized as %{kind}
-    zh-CN: 识别为 %{kind}
+  matches:
+    json:
+      en: Recognized as JSON
+      zh-CN: 识别为 JSON
+    json_hint:
+      en: Can open as JSON in the JSON editor
+      zh-CN: 可用 JSON 编辑器按 JSON 打开
+    yaml:
+      en: Recognized as YAML
+      zh-CN: 识别为 YAML
+    xml:
+      en: Can open as XML in the JSON editor
+      zh-CN: 可用 JSON 编辑器按 XML 打开
+    url_params:
+      en: Can open as URL parameters in the JSON editor
+      zh-CN: 可用 JSON 编辑器按 URL 参数打开
   url_params:
     en: URL parameters
     zh-CN: URL 参数

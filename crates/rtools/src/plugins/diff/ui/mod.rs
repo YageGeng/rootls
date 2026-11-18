@@ -17,7 +17,8 @@ static MANIFEST: PluginManifest = PluginManifest {
     title: "diff.title",
     description: "diff.description",
     icon: IconName::GitCompare,
-    keywords: &["diff", "compare"],
+    triggers: &["diff"],
+    keywords: &["compare"],
 };
 
 /// The text diff plugin.

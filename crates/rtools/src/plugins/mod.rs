@@ -5,3 +5,13 @@ pub mod clipboard;
 pub mod diff;
 pub mod json;
 pub mod translate;
+
+/// Returns the application plugin catalog in its default launcher order.
+pub fn builtins() -> [Box<dyn crate::plugin::Plugin>; 4] {
+    [
+        Box::new(json::ui::JsonPlugin),
+        Box::new(diff::ui::DiffPlugin),
+        Box::new(translate::TranslatePlugin),
+        Box::new(clipboard::ClipboardPlugin),
+    ]
+}

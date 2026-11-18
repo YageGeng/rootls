@@ -5,10 +5,11 @@ pub mod credentials;
 pub mod session;
 mod view;
 
-use crate::plugin::{Launch, Plugin, PluginManifest, PluginView};
+use crate::plugin::{
+    ContentKind, ContentMatch, ContentRecognizer, Launch, Plugin, PluginManifest, PluginView,
+};
 use gpui_kit::assets::IconName;
-use gpui_kit::{App, AppContext as _, SharedString, Window};
-use rust_i18n::t;
+use gpui_kit::{App, AppContext as _, Window};
 use view::TranslateView;
 
 static MANIFEST: PluginManifest = PluginManifest {
@@ -16,6 +17,7 @@ static MANIFEST: PluginManifest = PluginManifest {
     title: "translate.title",
     description: "translate.description",
     icon: IconName::Languages,
+    triggers: &["trans", "fy"],
     keywords: &["translate", "translation", "fanyi", "翻译"],
 };
 
@@ -29,8 +31,13 @@ impl Plugin for TranslatePlugin {
     }
 
     /// Recognizes nonempty text locally without reading credentials or calling the model.
-    fn accepts(&self, input: &str) -> Option<SharedString> {
-        (!input.trim().is_empty()).then(|| t!("translate.recognized").into())
+    fn recognizer(&self) -> Option<ContentRecognizer> {
+        Some(|input| {
+            (!input.trim().is_empty()).then_some(ContentMatch {
+                kind: ContentKind::Fallback,
+                message_key: "translate.recognized",
+            })
+        })
     }
 
     /// Opens a fresh in-memory session seeded from pasted launcher content.

@@ -4,6 +4,8 @@ use rtools::launcher::paste::{PASTE_INLINE_LIMIT, PastedInput};
 fn intercepts_multiline_and_large_text() {
     assert!(PastedInput::intercept("json".into()).is_none());
     assert!(PastedInput::intercept("{\n  \"a\": 1\n}".into()).is_some());
+    let raw = "[\r\t10,\r\t20\r]";
+    assert_eq!(PastedInput::intercept(raw.into()).unwrap().into_text(), raw);
     assert!(PastedInput::intercept("a".repeat(PASTE_INLINE_LIMIT)).is_none());
     assert!(PastedInput::intercept("a".repeat(PASTE_INLINE_LIMIT + 1)).is_some());
 }
@@ -27,4 +29,11 @@ fn preview_collapses_whitespace_and_truncates_by_char() {
     let long = PastedInput::intercept(format!("x\n{}", "胡".repeat(100))).unwrap();
     assert_eq!(long.preview().chars().count(), 81);
     assert!(long.preview().ends_with('…'));
+    let first = long.preview();
+    let second = long.preview();
+    assert_eq!(
+        first.as_ptr(),
+        second.as_ptr(),
+        "redraws share the preview text"
+    );
 }

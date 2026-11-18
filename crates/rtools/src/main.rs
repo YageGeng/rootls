@@ -14,11 +14,10 @@ use rtools::assets::AppAssets;
 use rtools::cli::ShellCommand;
 use rtools::instance::InstanceName;
 use rtools::logging::LogFiles;
-use rtools::plugin::{Plugin, PluginRegistry};
-use rtools::plugins::clipboard::{ClipboardPlugin, service::ClipboardState};
-use rtools::plugins::diff::ui::DiffPlugin;
-use rtools::plugins::json::ui::JsonPlugin;
-use rtools::plugins::translate::{TranslatePlugin, client::DeepSeekClient};
+use rtools::plugin::PluginRegistry;
+use rtools::plugins::{
+    self, clipboard::service::ClipboardState, translate::client::DeepSeekClient,
+};
 use rtools::settings::SettingsStore;
 use rtools::shell::Shell;
 use rtools::{hotkey, launcher, settings, tray, ui};
@@ -100,14 +99,7 @@ fn main() -> ExitCode {
             launcher::bind_keys(cx);
             settings::window::bind_keys(cx);
 
-            let registry: PluginRegistry = [
-                Box::new(JsonPlugin) as Box<dyn Plugin>,
-                Box::new(DiffPlugin),
-                Box::new(TranslatePlugin),
-                Box::new(ClipboardPlugin),
-            ]
-            .into_iter()
-            .collect();
+            let registry: PluginRegistry = plugins::builtins().into_iter().collect();
             registry.bind_keys(cx);
             ClipboardState::init(dirs::data_local_dir().map(|p| p.join("rtools/clipboard")), cx);
             let data_root = dirs::data_dir()

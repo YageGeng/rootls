@@ -3,13 +3,12 @@
 mod view;
 
 use gpui_kit::assets::IconName;
-use gpui_kit::{App, AppContext as _, SharedString, Window};
-use rust_i18n::t;
-use serde_json::Value;
+use gpui_kit::{App, AppContext as _, Window};
 
-use crate::plugin::{Launch, Plugin, PluginManifest, PluginView};
+use crate::plugin::{
+    ContentKind, ContentMatch, ContentRecognizer, Launch, Plugin, PluginManifest, PluginView,
+};
 use crate::plugins::json::core::InputKind;
-use crate::plugins::json::core::convert::yaml::Yaml;
 use view::JsonPluginView;
 
 /// Static metadata shown in the launcher.
@@ -18,11 +17,34 @@ static MANIFEST: PluginManifest = PluginManifest {
     title: "json.title",
     description: "json.description",
     icon: IconName::Braces,
-    keywords: &["json", "jsoneditor"],
+    triggers: &["json"],
+    keywords: &["jsoneditor"],
 };
 
 /// The JSON editor plugin.
 pub struct JsonPlugin;
+
+impl JsonPlugin {
+    /// Maps the core format assessment to a launcher rank and a translatable row description.
+    fn recognize(input: &str) -> Option<ContentMatch> {
+        let (format, verified) = InputKind::recognize(input)?;
+        let message_key = match format {
+            InputKind::Json if verified => "json.matches.json",
+            InputKind::Json => "json.matches.json_hint",
+            InputKind::Yaml => "json.matches.yaml",
+            InputKind::Xml => "json.matches.xml",
+            InputKind::UrlParams => "json.matches.url_params",
+        };
+        Some(ContentMatch {
+            kind: if verified {
+                ContentKind::Recognized
+            } else {
+                ContentKind::Hint
+            },
+            message_key,
+        })
+    }
+}
 
 impl Plugin for JsonPlugin {
     /// Returns the JSON editor's metadata.
@@ -30,15 +52,9 @@ impl Plugin for JsonPlugin {
         &MANIFEST
     }
 
-    /// Recognizes JSON, XML and URL parameters by their prefix; multi-line text
-    /// (a pasted chip, never a keystroke) is additionally tried as YAML.
-    fn accepts(&self, input: &str) -> Option<SharedString> {
-        let kind = InputKind::sniff(input).or_else(|| {
-            // Parsing is enough to recognize YAML; formatting waits for the editor.
-            (input.contains('\n') && Value::try_from(Yaml(input.trim())).is_ok())
-                .then_some(InputKind::Yaml)
-        })?;
-        Some(t!("json.recognized", kind = kind.label()).into())
+    /// Shares the same recognizer between inline edits and background paste processing.
+    fn recognizer(&self) -> Option<ContentRecognizer> {
+        Some(Self::recognize)
     }
 
     /// Builds a new editor view; the XML grammar of its result pane is
